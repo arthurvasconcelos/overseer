@@ -1,0 +1,40 @@
+version: 2
+
+project_name: overseer
+
+before:
+  hooks:
+    - go -C cli mod tidy
+
+builds:
+  - id: overseer
+    dir: cli
+    main: .
+    binary: overseer
+    ldflags:
+      - -s -w -X github.com/arthurvasconcelos/overseer/cmd.Version={{.Version}}
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: overseer
+    formats:
+      - tar.gz
+    name_template: "overseer_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - none*
+
+checksum:
+  name_template: "overseer_{{ .Version }}_checksums.txt"
+
+release:
+  github:
+    owner: arthurvasconcelos
+    name: overseer
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"
