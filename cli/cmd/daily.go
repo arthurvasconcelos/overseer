@@ -56,7 +56,7 @@ func runDaily(_ *cobra.Command, _ []string) error {
 }
 
 func printGCal(ctx context.Context, account config.GoogleAccount) error {
-	credsJSON, err := secrets.Read(account.CredentialsDoc)
+	credsJSON, err := secrets.ReadAs(account.CredentialsDoc, account.OPAccount)
 	if err != nil {
 		return err
 	}

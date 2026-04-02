@@ -10,7 +10,18 @@ import (
 // Read retrieves a secret from 1Password using a full op:// reference.
 // It shells out to: op read "op://vault/item/field"
 func Read(ref string) (string, error) {
-	out, err := exec.Command("op", "read", ref).Output()
+	return ReadAs(ref, "")
+}
+
+// ReadAs is like Read but targets a specific 1Password account (e.g.
+// "my.1password.com"). Use this when the secret lives in a different account
+// than the CLI default.
+func ReadAs(ref, account string) (string, error) {
+	args := []string{"read", ref}
+	if account != "" {
+		args = append(args, "--account", account)
+	}
+	out, err := exec.Command("op", args...).Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return "", fmt.Errorf("op read %s: %s", ref, strings.TrimSpace(string(exitErr.Stderr)))
