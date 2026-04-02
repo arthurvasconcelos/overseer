@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
+	"github.com/arthurvasconcelos/overseer/internal/gcal"
 	"github.com/arthurvasconcelos/overseer/internal/jira"
 	"github.com/arthurvasconcelos/overseer/internal/secrets"
 	overseerslack "github.com/arthurvasconcelos/overseer/internal/slack"
@@ -44,6 +45,48 @@ func runDaily(_ *cobra.Command, _ []string) error {
 			fmt.Printf("  [warn] slack/%s: %v\n", ws.Name, err)
 		}
 	}
+
+	for _, account := range cfg.Integrations.Google {
+		if err := printGCal(ctx, account); err != nil {
+			fmt.Printf("  [warn] google/%s: %v\n", account.Name, err)
+		}
+	}
+
+	return nil
+}
+
+func printGCal(ctx context.Context, account config.GoogleAccount) error {
+	credsJSON, err := secrets.Read(account.CredentialsDoc)
+	if err != nil {
+		return err
+	}
+
+	client, err := gcal.New(ctx, []byte(credsJSON), account.Name)
+	if err != nil {
+		return err
+	}
+
+	events, err := client.TodaysEvents(ctx)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Google Calendar — %s (%d events today)\n", account.Name, len(events))
+	if len(events) == 0 {
+		fmt.Printf("  no events today\n")
+	}
+	for _, e := range events {
+		if e.AllDay {
+			fmt.Printf("  all day       %s\n", e.Title)
+		} else {
+			fmt.Printf("  %s – %s  %s\n",
+				e.Start.Format("15:04"),
+				e.End.Format("15:04"),
+				e.Title,
+			)
+		}
+	}
+	fmt.Println()
 
 	return nil
 }

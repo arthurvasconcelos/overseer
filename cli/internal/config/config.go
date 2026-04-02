@@ -43,10 +43,11 @@ type SlackWorkspace struct {
 }
 
 // GoogleAccount configures a single Google account for Calendar access.
-// CredentialsFile is a path to an OAuth2 credentials JSON file.
+// CredentialsDoc is an op:// reference to a 1Password Document containing
+// the OAuth2 credentials JSON downloaded from Google Cloud Console.
 type GoogleAccount struct {
-	Name            string `mapstructure:"name"`
-	CredentialsFile string `mapstructure:"credentials_file"`
+	Name           string `mapstructure:"name"`
+	CredentialsDoc string `mapstructure:"credentials_doc"`
 }
 
 // Path returns the path to the config file.

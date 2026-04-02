@@ -65,7 +65,7 @@ func runConfig(_ *cobra.Command, _ []string) error {
 	if len(cfg.Integrations.Google) > 0 {
 		fmt.Printf("\ngoogle:\n")
 		for _, g := range cfg.Integrations.Google {
-			fmt.Printf("  - name: %s  credentials: %s\n", g.Name, g.CredentialsFile)
+			fmt.Printf("  - name: %s  credentials_doc: %s\n", g.Name, g.CredentialsDoc)
 		}
 	}
 
