@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -18,4 +19,17 @@ func Get(vault, item, field string) (string, error) {
 		return "", fmt.Errorf("op read %s: %w", ref, err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// RunWithEnv runs the given command with secrets injected from a 1Password
+// environment, equivalent to: op run --environment <envID> --no-masking -- cmd
+// stdout/stderr/stdin are inherited from the current process.
+func RunWithEnv(envID string, args ...string) error {
+	opArgs := []string{"run", "--environment", envID, "--no-masking", "--"}
+	opArgs = append(opArgs, args...)
+	cmd := exec.Command("op", opArgs...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }

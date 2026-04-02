@@ -15,7 +15,8 @@ type Config struct {
 
 // SecretsConfig holds 1Password-related settings.
 type SecretsConfig struct {
-	Vault string `mapstructure:"vault"`
+	Vault        string            `mapstructure:"vault"`
+	Environments map[string]string `mapstructure:"environments"`
 }
 
 // Path returns the path to the config file.
