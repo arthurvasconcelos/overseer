@@ -47,6 +47,13 @@ func Load() (*Config, error) {
 				return nil, fmt.Errorf("reading config: %w", err)
 			}
 		}
+		// File doesn't exist yet — write defaults so the path is always valid.
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return nil, fmt.Errorf("creating config dir: %w", err)
+		}
+		if err := v.WriteConfigAs(path); err != nil {
+			return nil, fmt.Errorf("writing default config: %w", err)
+		}
 	}
 
 	var cfg Config
