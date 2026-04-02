@@ -46,6 +46,35 @@ type searchResponse struct {
 	} `json:"issues"`
 }
 
+// Ping verifies credentials by calling /rest/api/3/myself.
+// Returns the authenticated user's email address.
+func (c *Client) Ping(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/rest/api/3/myself", nil)
+	if err != nil {
+		return "", err
+	}
+	req.SetBasicAuth(c.email, c.token)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("jira: ping: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("jira: ping: unexpected status %s", resp.Status)
+	}
+
+	var user struct {
+		EmailAddress string `json:"emailAddress"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+		return "", fmt.Errorf("jira: ping: decoding response: %w", err)
+	}
+	return user.EmailAddress, nil
+}
+
 // MyIssues returns unresolved issues assigned to the current user.
 func (c *Client) MyIssues(ctx context.Context) ([]Issue, error) {
 	endpoint := fmt.Sprintf("%s/rest/api/3/search/jql", c.baseURL)

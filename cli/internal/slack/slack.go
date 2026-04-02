@@ -23,6 +23,16 @@ type Mention struct {
 	Text    string
 }
 
+// Ping verifies the token by calling auth.test.
+// Returns the bot's display name.
+func (c *Client) Ping() (string, error) {
+	info, err := c.api.AuthTest()
+	if err != nil {
+		return "", fmt.Errorf("slack: ping: %w", err)
+	}
+	return info.User, nil
+}
+
 // Mentions returns recent messages that mention the bot user across all
 // channels it is a member of. Only one page of history per channel is
 // fetched to stay well within Slack rate limits.

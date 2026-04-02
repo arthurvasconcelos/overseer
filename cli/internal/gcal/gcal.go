@@ -64,6 +64,34 @@ func New(ctx context.Context, credentialsJSON []byte, accountName string) (*Clie
 	return &Client{svc: svc}, nil
 }
 
+// TokenInfo describes the cached OAuth token state for an account.
+type TokenInfo struct {
+	Present bool
+	Valid   bool
+	Expiry  time.Time
+}
+
+// TokenStatus reads the cached token file and returns its state without
+// triggering any auth flow.
+func TokenStatus(accountName string) (TokenInfo, error) {
+	path, err := tokenPath(accountName)
+	if err != nil {
+		return TokenInfo{}, err
+	}
+	token, err := loadToken(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return TokenInfo{Present: false}, nil
+		}
+		return TokenInfo{}, fmt.Errorf("gcal: reading token: %w", err)
+	}
+	return TokenInfo{
+		Present: true,
+		Valid:   token.Valid(),
+		Expiry:  token.Expiry,
+	}, nil
+}
+
 // TodaysEvents returns all events for today across all calendars.
 func (c *Client) TodaysEvents(ctx context.Context) ([]Event, error) {
 	now := time.Now()
