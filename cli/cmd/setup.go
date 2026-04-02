@@ -52,7 +52,6 @@ func runSetup(_ *cobra.Command, _ []string) error {
 
 	links := []struct{ src, dst string }{
 		{filepath.Join(repoRoot, "dotfiles", "shell", ".zshrc"), filepath.Join(home, ".zshrc")},
-		{filepath.Join(repoRoot, "dotfiles", "git", ".gitconfig"), filepath.Join(home, ".gitconfig")},
 	}
 
 	for _, l := range links {

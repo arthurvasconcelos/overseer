@@ -135,8 +135,7 @@ echo ""
 install_binary
 echo ""
 
-make_symlink "${REPO_ROOT}/dotfiles/shell/.zshrc"    "${HOME}/.zshrc"
-make_symlink "${REPO_ROOT}/dotfiles/git/.gitconfig"  "${HOME}/.gitconfig"
+make_symlink "${REPO_ROOT}/dotfiles/shell/.zshrc" "${HOME}/.zshrc"
 
 echo ""
 echo "Done."
