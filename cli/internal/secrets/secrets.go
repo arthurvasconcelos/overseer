@@ -7,10 +7,9 @@ import (
 	"strings"
 )
 
-// Get retrieves a secret from 1Password using the op CLI.
+// Read retrieves a secret from 1Password using a full op:// reference.
 // It shells out to: op read "op://vault/item/field"
-func Get(vault, item, field string) (string, error) {
-	ref := fmt.Sprintf("op://%s/%s/%s", vault, item, field)
+func Read(ref string) (string, error) {
 	out, err := exec.Command("op", "read", ref).Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -19,6 +18,11 @@ func Get(vault, item, field string) (string, error) {
 		return "", fmt.Errorf("op read %s: %w", ref, err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// Get retrieves a secret from 1Password by vault, item, and field name.
+func Get(vault, item, field string) (string, error) {
+	return Read(fmt.Sprintf("op://%s/%s/%s", vault, item, field))
 }
 
 // RunWithEnv runs the given command with secrets injected from a 1Password
