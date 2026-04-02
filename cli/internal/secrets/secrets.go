@@ -24,6 +24,11 @@ func Get(vault, item, field string) (string, error) {
 // RunWithEnv runs the given command with secrets injected from a 1Password
 // environment, equivalent to: op run --environment <envID> --no-masking -- cmd
 // stdout/stderr/stdin are inherited from the current process.
+//
+// args must be a real executable — no shell is involved. If you need shell
+// features (pipes, functions, expansion), pass the shell explicitly:
+//
+//	RunWithEnv(envID, "zsh", "-c", "your-command")
 func RunWithEnv(envID string, args ...string) error {
 	opArgs := []string{"run", "--environment", envID, "--no-masking", "--"}
 	opArgs = append(opArgs, args...)
