@@ -13,6 +13,12 @@ var rootCmd = &cobra.Command{
 	Long: `overseer is a personal CLI tool for bootstrapping machines, managing
 dotfiles, and integrating with daily tools like Slack, Google Calendar,
 and 1Password.`,
+	PersistentPreRun: func(_ *cobra.Command, _ []string) {
+		startUpdateCheck()
+	},
+	PersistentPostRun: func(_ *cobra.Command, _ []string) {
+		printUpdateNotice()
+	},
 }
 
 func Execute() {
