@@ -29,9 +29,16 @@ var reposPullCmd = &cobra.Command{
 	RunE:  runReposPull,
 }
 
+var reposSetupCmd = &cobra.Command{
+	Use:   "setup",
+	Short: "Apply git profiles to all already-cloned managed repos",
+	RunE:  runReposSetup,
+}
+
 func init() {
 	reposCmd.AddCommand(reposStatusCmd)
 	reposCmd.AddCommand(reposPullCmd)
+	reposCmd.AddCommand(reposSetupCmd)
 	rootCmd.AddCommand(reposCmd)
 }
 
@@ -122,7 +129,7 @@ func runReposPull(_ *cobra.Command, _ []string) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results[i] = repoPull(home, repo)
+			results[i] = repoPull(home, repo, cfg)
 		}()
 	}
 	wg.Wait()
@@ -132,6 +139,34 @@ func runReposPull(_ *cobra.Command, _ []string) error {
 			fmt.Printf("  [warn] %s: %v\n\n", r.name, r.err)
 		} else {
 			fmt.Print(r.output)
+		}
+	}
+	return nil
+}
+
+func runReposSetup(_ *cobra.Command, _ []string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	if len(cfg.Repos) == 0 {
+		fmt.Println("no repos configured — add entries under repos: in config.yaml")
+		return nil
+	}
+
+	home := resolveOverseerHome(cfg)
+	for _, repo := range cfg.Repos {
+		if repo.GitProfile == "" {
+			continue
+		}
+		path := repoRoot(home, repo.Path)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			fmt.Printf("%s: not cloned — skipping\n", repo.Name)
+			continue
+		}
+		msg := applyRepoProfile(path, repo, cfg)
+		if msg != "" {
+			fmt.Printf("%s: %s\n", repo.Name, msg)
 		}
 	}
 	return nil
@@ -166,7 +201,7 @@ func repoStatus(home string, repo config.RepoConfig) repoResult {
 	return repoResult{name: repo.Name, readonly: repo.Readonly, output: sb.String()}
 }
 
-func repoPull(home string, repo config.RepoConfig) repoResult {
+func repoPull(home string, repo config.RepoConfig, cfg *config.Config) repoResult {
 	path := repoRoot(home, repo.Path)
 	var sb strings.Builder
 
@@ -182,7 +217,11 @@ func repoPull(home string, repo config.RepoConfig) repoResult {
 		if err != nil {
 			return repoResult{name: repo.Name, err: fmt.Errorf("clone failed: %s", out)}
 		}
-		fmt.Fprintf(&sb, "  cloned\n\n")
+		fmt.Fprintf(&sb, "  cloned\n")
+		if msg := applyRepoProfile(path, repo, cfg); msg != "" {
+			fmt.Fprintf(&sb, "  %s\n", msg)
+		}
+		fmt.Fprintln(&sb)
 		return repoResult{name: repo.Name, output: sb.String()}
 	}
 
@@ -193,6 +232,32 @@ func repoPull(home string, repo config.RepoConfig) repoResult {
 	fmt.Fprintf(&sb, "  %s\n\n", strings.TrimSpace(out))
 
 	return repoResult{name: repo.Name, readonly: repo.Readonly, output: sb.String()}
+}
+
+// applyRepoProfile applies the git_profile configured for a repo.
+// Returns a status message (empty if no profile configured).
+func applyRepoProfile(path string, repo config.RepoConfig, cfg *config.Config) string {
+	if repo.GitProfile == "" || repo.Readonly {
+		return ""
+	}
+	var profile *config.GitProfile
+	for i := range cfg.Git.Profiles {
+		if cfg.Git.Profiles[i].Name == repo.GitProfile {
+			profile = &cfg.Git.Profiles[i]
+			break
+		}
+	}
+	if profile == nil {
+		return fmt.Sprintf("[warn] git profile %q not found", repo.GitProfile)
+	}
+	resolved, err := resolveProfile(*profile, cfg.Git.Defaults, cfg.System)
+	if err != nil {
+		return fmt.Sprintf("[warn] resolving profile %q: %v", repo.GitProfile, err)
+	}
+	if err := applyGitConfigIn(path, gitScopeLocal, resolved); err != nil {
+		return fmt.Sprintf("[warn] applying profile %q: %v", repo.GitProfile, err)
+	}
+	return fmt.Sprintf("applied git profile %q", repo.GitProfile)
 }
 
 func git(args ...string) (string, error) {

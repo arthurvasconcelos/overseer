@@ -19,10 +19,11 @@ type Config struct {
 
 // RepoConfig defines a managed repository.
 type RepoConfig struct {
-	Name     string `mapstructure:"name"`
-	URL      string `mapstructure:"url"`
-	Path     string `mapstructure:"path"`     // relative to OVERSEER_HOME
-	Readonly bool   `mapstructure:"readonly"` // skip push, warn on local changes
+	Name       string `mapstructure:"name"`
+	URL        string `mapstructure:"url"`
+	Path       string `mapstructure:"path"`        // relative to OVERSEER_HOME
+	Readonly   bool   `mapstructure:"readonly"`    // skip push, warn on local changes
+	GitProfile string `mapstructure:"git_profile"` // profile name from git.profiles to apply after clone
 }
 
 // SecretsConfig holds 1Password-related settings.

@@ -121,6 +121,10 @@ func resolveProfile(p config.GitProfile, d config.GitDefaults, sys config.System
 }
 
 func applyGitConfig(scope string, r resolvedProfile) error {
+	return applyGitConfigIn("", scope, r)
+}
+
+func applyGitConfigIn(dir, scope string, r resolvedProfile) error {
 	settings := [][]string{
 		{"user.name", r.UserName},
 		{"user.email", r.Email},
@@ -136,7 +140,11 @@ func applyGitConfig(scope string, r resolvedProfile) error {
 
 	for _, s := range settings {
 		args := []string{"config", "--" + scope, s[0], s[1]}
-		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+		cmd := exec.Command("git", args...)
+		if dir != "" {
+			cmd.Dir = dir
+		}
+		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("git config %s: %s", s[0], strings.TrimSpace(string(out)))
 		}
 	}
