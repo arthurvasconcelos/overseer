@@ -7,6 +7,7 @@ import (
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/secrets"
+	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -68,18 +69,19 @@ func runGitSetup(_ *cobra.Command, _ []string) error {
 }
 
 func pickProfile(profiles []config.GitProfile) (config.GitProfile, error) {
-	fmt.Println("select a git profile:")
+	items := make([]tui.SelectItem, len(profiles))
 	for i, p := range profiles {
-		fmt.Printf("  %d) %s (%s)\n", i+1, p.Name, p.Email)
-	}
-	fmt.Print("enter number: ")
-
-	var choice int
-	if _, err := fmt.Scan(&choice); err != nil || choice < 1 || choice > len(profiles) {
-		return config.GitProfile{}, fmt.Errorf("invalid selection")
+		items[i] = tui.SelectItem{Title: p.Name, Subtitle: p.Email}
 	}
 
-	return profiles[choice-1], nil
+	idx, err := tui.Select("select a git profile", items)
+	if err != nil {
+		return config.GitProfile{}, err
+	}
+	if idx == -1 {
+		return config.GitProfile{}, fmt.Errorf("cancelled")
+	}
+	return profiles[idx], nil
 }
 
 // resolvedProfile holds the final merged values ready to pass to git config.
