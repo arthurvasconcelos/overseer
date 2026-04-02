@@ -38,7 +38,6 @@ func runConfig(_ *cobra.Command, _ []string) error {
 
 	fmt.Printf("config file: %s\n\n", fileLink(path))
 	fmt.Printf("secrets:\n")
-	fmt.Printf("  vault: %s\n", cfg.Secrets.Vault)
 	if len(cfg.Secrets.Environments) > 0 {
 		fmt.Printf("  environments:\n")
 		keys := make([]string, 0, len(cfg.Secrets.Environments))

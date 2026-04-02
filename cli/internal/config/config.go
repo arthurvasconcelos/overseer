@@ -16,7 +16,6 @@ type Config struct {
 
 // SecretsConfig holds 1Password-related settings.
 type SecretsConfig struct {
-	Vault        string            `mapstructure:"vault"`
 	Environments map[string]string `mapstructure:"environments"`
 }
 
@@ -69,8 +68,6 @@ func Load() (*Config, error) {
 
 	v := viper.New()
 	v.SetConfigFile(path)
-
-	v.SetDefault("secrets.vault", "Personal")
 
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
