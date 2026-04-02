@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
@@ -23,6 +25,13 @@ func init() {
 	rootCmd.AddCommand(dailyCmd)
 }
 
+// section holds the buffered output for one integration so results can be
+// collected in parallel and printed in a deterministic order.
+type section struct {
+	buf bytes.Buffer
+	err error
+}
+
 func runDaily(_ *cobra.Command, _ []string) error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -34,28 +43,81 @@ func runDaily(_ *cobra.Command, _ []string) error {
 
 	fmt.Printf("overseer daily — %s\n\n", time.Now().Format("Monday, 02 Jan 2006"))
 
+	// Build one task per configured integration instance.
+	type task struct {
+		label string
+		run   func() (string, error)
+	}
+
+	var tasks []task
 	for _, instance := range cfg.Integrations.Jira {
-		if err := printJira(ctx, instance); err != nil {
-			fmt.Printf("  [warn] jira/%s: %v\n", instance.Name, err)
-		}
+		instance := instance
+		tasks = append(tasks, task{
+			label: "jira/" + instance.Name,
+			run: func() (string, error) {
+				var b bytes.Buffer
+				if err := printJira(ctx, instance, &b); err != nil {
+					return "", err
+				}
+				return b.String(), nil
+			},
+		})
 	}
-
 	for _, ws := range cfg.Integrations.Slack {
-		if err := printSlack(ws); err != nil {
-			fmt.Printf("  [warn] slack/%s: %v\n", ws.Name, err)
-		}
+		ws := ws
+		tasks = append(tasks, task{
+			label: "slack/" + ws.Name,
+			run: func() (string, error) {
+				var b bytes.Buffer
+				if err := printSlack(ws, &b); err != nil {
+					return "", err
+				}
+				return b.String(), nil
+			},
+		})
+	}
+	for _, account := range cfg.Integrations.Google {
+		account := account
+		tasks = append(tasks, task{
+			label: "google/" + account.Name,
+			run: func() (string, error) {
+				var b bytes.Buffer
+				if err := printGCal(ctx, account, &b); err != nil {
+					return "", err
+				}
+				return b.String(), nil
+			},
+		})
 	}
 
-	for _, account := range cfg.Integrations.Google {
-		if err := printGCal(ctx, account); err != nil {
-			fmt.Printf("  [warn] google/%s: %v\n", account.Name, err)
+	// Run all tasks in parallel, preserving order in results.
+	results := make([]section, len(tasks))
+	var wg sync.WaitGroup
+	for i, t := range tasks {
+		i, t := i, t
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			out, err := t.run()
+			results[i].buf.WriteString(out)
+			results[i].err = err
+		}()
+	}
+	wg.Wait()
+
+	// Print in original order.
+	for i, t := range tasks {
+		if results[i].err != nil {
+			fmt.Printf("  [warn] %s: %v\n\n", t.label, results[i].err)
+		} else {
+			fmt.Print(results[i].buf.String())
 		}
 	}
 
 	return nil
 }
 
-func printGCal(ctx context.Context, account config.GoogleAccount) error {
+func printGCal(ctx context.Context, account config.GoogleAccount, w *bytes.Buffer) error {
 	credsJSON, err := secrets.ReadAs(account.CredentialsDoc, account.OPAccount)
 	if err != nil {
 		return err
@@ -71,27 +133,23 @@ func printGCal(ctx context.Context, account config.GoogleAccount) error {
 		return err
 	}
 
-	fmt.Printf("Google Calendar — %s (%d events today)\n", account.Name, len(events))
+	fmt.Fprintf(w, "Google Calendar — %s (%d events today)\n", account.Name, len(events))
 	if len(events) == 0 {
-		fmt.Printf("  no events today\n")
+		fmt.Fprintf(w, "  no events today\n")
 	}
 	for _, e := range events {
 		if e.AllDay {
-			fmt.Printf("  all day       %s\n", e.Title)
+			fmt.Fprintf(w, "  all day       %s\n", e.Title)
 		} else {
-			fmt.Printf("  %s – %s  %s\n",
-				e.Start.Format("15:04"),
-				e.End.Format("15:04"),
-				e.Title,
-			)
+			fmt.Fprintf(w, "  %s – %s  %s\n", e.Start.Format("15:04"), e.End.Format("15:04"), e.Title)
 		}
 	}
-	fmt.Println()
+	fmt.Fprintln(w)
 
 	return nil
 }
 
-func printSlack(ws config.SlackWorkspace) error {
+func printSlack(ws config.SlackWorkspace, w *bytes.Buffer) error {
 	token, err := secrets.ReadAs(ws.Token, ws.OPAccount)
 	if err != nil {
 		return err
@@ -104,22 +162,21 @@ func printSlack(ws config.SlackWorkspace) error {
 		return err
 	}
 
-	fmt.Printf("Slack — %s\n", ws.Name)
-
+	fmt.Fprintf(w, "Slack — %s\n", ws.Name)
 	if len(mentions) == 0 {
-		fmt.Printf("  no recent mentions\n")
+		fmt.Fprintf(w, "  no recent mentions\n")
 	} else {
-		fmt.Printf("  mentions:\n")
+		fmt.Fprintf(w, "  mentions:\n")
 		for _, m := range mentions {
-			fmt.Printf("    #%-20s  %s\n", m.Channel, m.Text)
+			fmt.Fprintf(w, "    #%-20s  %s\n", m.Channel, m.Text)
 		}
 	}
-	fmt.Println()
+	fmt.Fprintln(w)
 
 	return nil
 }
 
-func printJira(ctx context.Context, instance config.JiraInstance) error {
+func printJira(ctx context.Context, instance config.JiraInstance, w *bytes.Buffer) error {
 	email, err := secrets.ReadAs(instance.Email, instance.OPAccount)
 	if err != nil {
 		return err
@@ -135,14 +192,14 @@ func printJira(ctx context.Context, instance config.JiraInstance) error {
 		return err
 	}
 
-	fmt.Printf("Jira — %s (%d open)\n", instance.Name, len(issues))
+	fmt.Fprintf(w, "Jira — %s (%d open)\n", instance.Name, len(issues))
 	if len(issues) == 0 {
-		fmt.Printf("  no open issues\n")
+		fmt.Fprintf(w, "  no open issues\n")
 	}
 	for _, i := range issues {
-		fmt.Printf("  %-12s  %-14s  %-10s  %s\n", i.Key, i.Status, i.Priority, i.Summary)
+		fmt.Fprintf(w, "  %-12s  %-14s  %-10s  %s\n", i.Key, i.Status, i.Priority, i.Summary)
 	}
-	fmt.Println()
+	fmt.Fprintln(w)
 
 	return nil
 }
