@@ -14,6 +14,15 @@ type Config struct {
 	Integrations IntegrationsConfig `mapstructure:"integrations"`
 	Git          GitConfig          `mapstructure:"git"`
 	System       SystemConfig       `mapstructure:"system"`
+	Repos        []RepoConfig       `mapstructure:"repos"`
+}
+
+// RepoConfig defines a managed repository.
+type RepoConfig struct {
+	Name     string `mapstructure:"name"`
+	URL      string `mapstructure:"url"`
+	Path     string `mapstructure:"path"`     // relative to OVERSEER_HOME
+	Readonly bool   `mapstructure:"readonly"` // skip push, warn on local changes
 }
 
 // SecretsConfig holds 1Password-related settings.
@@ -61,6 +70,7 @@ type GoogleAccount struct {
 // SystemConfig holds machine-specific overrides (lives in config.local.yaml).
 type SystemConfig struct {
 	GPGSSHProgram string `mapstructure:"gpg_ssh_program"`
+	OverseerHome  string `mapstructure:"overseer_home"`
 }
 
 // GitConfig holds git identity profiles and shared defaults.
