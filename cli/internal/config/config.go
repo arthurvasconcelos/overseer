@@ -14,6 +14,7 @@ type Config struct {
 	Integrations IntegrationsConfig `mapstructure:"integrations"`
 	Git          GitConfig          `mapstructure:"git"`
 	System       SystemConfig       `mapstructure:"system"`
+	Obsidian     ObsidianConfig     `mapstructure:"obsidian"`
 	Repos        []RepoConfig       `mapstructure:"repos"`
 }
 
@@ -66,6 +67,15 @@ type GoogleAccount struct {
 	Name           string `mapstructure:"name"`
 	CredentialsDoc string `mapstructure:"credentials_doc"`
 	OPAccount      string `mapstructure:"op_account"` // optional 1Password account ID
+}
+
+// ObsidianConfig holds settings for the Obsidian vault integration.
+type ObsidianConfig struct {
+	VaultPath          string `mapstructure:"vault_path"`           // relative to overseer_home or absolute
+	VaultName          string `mapstructure:"vault_name"`           // basename as registered in Obsidian (for URI scheme)
+	DailyNotesFolder   string `mapstructure:"daily_notes_folder"`   // e.g. "06 - Daily"
+	TemplatesFolder    string `mapstructure:"templates_folder"`     // e.g. "99 - Meta/_templates"
+	DefaultFolder      string `mapstructure:"default_folder"`       // default folder for new notes (empty = root)
 }
 
 // SystemConfig holds machine-specific overrides (lives in config.local.yaml).
