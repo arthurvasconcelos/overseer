@@ -1,11 +1,11 @@
 package jira
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"time"
 )
 
@@ -48,15 +48,23 @@ type searchResponse struct {
 
 // MyIssues returns unresolved issues assigned to the current user.
 func (c *Client) MyIssues(ctx context.Context) ([]Issue, error) {
-	jql := "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC"
-	endpoint := fmt.Sprintf("%s/rest/api/3/search?jql=%s&fields=summary,status,priority&maxResults=20",
-		c.baseURL, url.QueryEscape(jql))
+	endpoint := fmt.Sprintf("%s/rest/api/3/search/jql", c.baseURL)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	body, err := json.Marshal(map[string]any{
+		"jql":        "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC",
+		"fields":     []string{"summary", "status", "priority"},
+		"maxResults": 20,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 	req.SetBasicAuth(c.email, c.token)
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.http.Do(req)
