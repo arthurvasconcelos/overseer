@@ -12,6 +12,8 @@ import (
 type Config struct {
 	Secrets      SecretsConfig      `mapstructure:"secrets"`
 	Integrations IntegrationsConfig `mapstructure:"integrations"`
+	Git          GitConfig          `mapstructure:"git"`
+	System       SystemConfig       `mapstructure:"system"`
 }
 
 // SecretsConfig holds 1Password-related settings.
@@ -56,6 +58,39 @@ type GoogleAccount struct {
 	OPAccount      string `mapstructure:"op_account"` // optional 1Password account ID
 }
 
+// SystemConfig holds machine-specific overrides (lives in config.local.yaml).
+type SystemConfig struct {
+	GPGSSHProgram string `mapstructure:"gpg_ssh_program"`
+}
+
+// GitConfig holds git identity profiles and shared defaults.
+type GitConfig struct {
+	Defaults GitDefaults  `mapstructure:"defaults"`
+	Profiles []GitProfile `mapstructure:"profiles"`
+}
+
+// GitDefaults holds git settings shared across all profiles.
+// Any field can be overridden per profile.
+type GitDefaults struct {
+	UserName       string `mapstructure:"user_name"`
+	GPGFormat      string `mapstructure:"gpg_format"`
+	GPGSSHProgram  string `mapstructure:"gpg_ssh_program"`
+	CommitGPGSign  bool   `mapstructure:"commit_gpgsign"`
+}
+
+// GitProfile holds a named git identity. Fields left empty inherit from GitDefaults.
+// Values starting with op:// are resolved via 1Password at runtime.
+type GitProfile struct {
+	Name          string `mapstructure:"name"`
+	Email         string `mapstructure:"email"`
+	SigningKey     string `mapstructure:"signing_key"`   // plain value or op:// reference
+	UserName      string `mapstructure:"user_name"`     // overrides defaults.user_name
+	GPGFormat     string `mapstructure:"gpg_format"`    // overrides defaults.gpg_format
+	GPGSSHProgram string `mapstructure:"gpg_ssh_program"` // overrides defaults.gpg_ssh_program
+	CommitGPGSign *bool  `mapstructure:"commit_gpgsign"`  // overrides defaults.commit_gpgsign
+	OPAccount     string `mapstructure:"op_account"`    // for op:// references in this profile
+}
+
 // Path returns the path to the config file.
 func Path() (string, error) {
 	dir, err := os.UserConfigDir()
@@ -65,8 +100,18 @@ func Path() (string, error) {
 	return filepath.Join(dir, "overseer", "config.yaml"), nil
 }
 
-// Load reads the config file and returns a Config.
-// If no config file exists, default values are returned without error.
+// LocalPath returns the path to the machine-specific config override file.
+func LocalPath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "overseer", "config.local.yaml"), nil
+}
+
+// Load reads config.yaml and merges config.local.yaml on top.
+// If config.yaml does not exist it is created with empty defaults.
+// config.local.yaml is optional — missing file is silently ignored.
 func Load() (*Config, error) {
 	path, err := Path()
 	if err != nil {
@@ -82,12 +127,28 @@ func Load() (*Config, error) {
 				return nil, fmt.Errorf("reading config: %w", err)
 			}
 		}
-		// File doesn't exist yet — write defaults so the path is always valid.
+		// File doesn't exist yet — write empty file so the path is always valid.
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return nil, fmt.Errorf("creating config dir: %w", err)
 		}
 		if err := v.WriteConfigAs(path); err != nil {
 			return nil, fmt.Errorf("writing default config: %w", err)
+		}
+	}
+
+	// Merge machine-local overrides if present.
+	localPath, err := LocalPath()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(localPath); err == nil {
+		vl := viper.New()
+		vl.SetConfigFile(localPath)
+		if err := vl.ReadInConfig(); err != nil {
+			return nil, fmt.Errorf("reading config.local.yaml: %w", err)
+		}
+		if err := v.MergeConfigMap(vl.AllSettings()); err != nil {
+			return nil, fmt.Errorf("merging config.local.yaml: %w", err)
 		}
 	}
 
