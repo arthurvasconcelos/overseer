@@ -8,6 +8,7 @@ import (
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/jira"
 	"github.com/arthurvasconcelos/overseer/internal/secrets"
+	overseerslack "github.com/arthurvasconcelos/overseer/internal/slack"
 	"github.com/spf13/cobra"
 )
 
@@ -37,6 +38,40 @@ func runDaily(_ *cobra.Command, _ []string) error {
 			fmt.Printf("  [warn] jira/%s: %v\n", instance.Name, err)
 		}
 	}
+
+	for _, ws := range cfg.Integrations.Slack {
+		if err := printSlack(ws); err != nil {
+			fmt.Printf("  [warn] slack/%s: %v\n", ws.Name, err)
+		}
+	}
+
+	return nil
+}
+
+func printSlack(ws config.SlackWorkspace) error {
+	token, err := secrets.Read(ws.Token)
+	if err != nil {
+		return err
+	}
+
+	client := overseerslack.New(token)
+
+	mentions, err := client.Mentions()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Slack — %s\n", ws.Name)
+
+	if len(mentions) == 0 {
+		fmt.Printf("  no recent mentions\n")
+	} else {
+		fmt.Printf("  mentions:\n")
+		for _, m := range mentions {
+			fmt.Printf("    #%-20s  %s\n", m.Channel, m.Text)
+		}
+	}
+	fmt.Println()
 
 	return nil
 }
