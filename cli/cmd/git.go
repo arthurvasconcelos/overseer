@@ -21,6 +21,11 @@ var gitSetupCmd = &cobra.Command{
 	RunE:  runGitSetup,
 }
 
+const (
+	gitScopeLocal  = "local"
+	gitScopeGlobal = "global"
+)
+
 var gitSetupGlobal bool
 
 func init() {
@@ -49,9 +54,9 @@ func runGitSetup(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	scope := "local"
+	scope := gitScopeLocal
 	if gitSetupGlobal {
-		scope = "global"
+		scope = gitScopeGlobal
 	}
 
 	if err := applyGitConfig(scope, resolved); err != nil {

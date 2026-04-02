@@ -2,6 +2,7 @@ package slack
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/slack-go/slack"
 )
@@ -43,6 +44,9 @@ func (c *Client) Mentions() ([]Mention, error) {
 
 	var mentions []Mention
 	for _, ch := range channels {
+		if len(mentions) >= 50 {
+			break
+		}
 		if !ch.IsMember {
 			continue
 		}
@@ -54,7 +58,7 @@ func (c *Client) Mentions() ([]Mention, error) {
 			continue
 		}
 		for _, msg := range history.Messages {
-			if findSubstr(msg.Text, "<@"+userID+">") {
+			if strings.Contains(msg.Text, "<@"+userID+">") {
 				name := ch.Name
 				if name == "" {
 					name = ch.ID
@@ -68,15 +72,6 @@ func (c *Client) Mentions() ([]Mention, error) {
 	}
 
 	return mentions, nil
-}
-
-func findSubstr(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }
 
 func truncate(s string, max int) string {

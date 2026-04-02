@@ -28,6 +28,8 @@ func init() {
 
 const githubRepo = "arthurvasconcelos/overseer"
 
+func trimV(v string) string { return strings.TrimPrefix(v, "v") }
+
 // updateCheckResult holds the result of the background version check.
 var updateCheckResult = make(chan string, 1)
 
@@ -42,8 +44,8 @@ func startUpdateCheck() {
 			updateCheckResult <- ""
 			return
 		}
-		latest := strings.TrimPrefix(tag, "v")
-		current := strings.TrimPrefix(Version, "v")
+		latest := trimV(tag)
+		current := trimV(Version)
 		if current != "dev" && latest != current {
 			updateCheckResult <- tag
 		} else {
@@ -61,8 +63,8 @@ func printUpdateNotice() {
 			fmt.Printf("\n\033[33mA new version is available: %s → %s\033[0m\n", Version, tag)
 			fmt.Printf("\033[33mRun \033[1moverseer update\033[0m\033[33m to upgrade.\033[0m\n")
 		}
-	case <-time.After(100 * time.Millisecond):
-		// Check didn't finish in time — skip silently.
+	case <-time.After(500 * time.Millisecond):
+		// Check didn't finish in time — skip silently to avoid delaying the user.
 	}
 }
 
@@ -75,8 +77,8 @@ func runUpdate(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	latestVersion := strings.TrimPrefix(latestTag, "v")
-	currentVersion := strings.TrimPrefix(Version, "v")
+	latestVersion := trimV(latestTag)
+	currentVersion := trimV(Version)
 
 	if currentVersion == latestVersion {
 		fmt.Printf("already up to date (%s)\n", Version)

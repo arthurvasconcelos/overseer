@@ -107,7 +107,10 @@ func httpClientFromConfig(ctx context.Context, cfg *oauth2.Config, accountName s
 
 	token, err := loadToken(tokenFile)
 	if err != nil {
-		// No cached token — run the browser consent flow.
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("gcal: loading cached token: %w", err)
+		}
+		// No cached token yet — run the browser consent flow.
 		token, err = runAuthFlow(ctx, cfg)
 		if err != nil {
 			return nil, err
