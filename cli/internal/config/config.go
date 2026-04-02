@@ -10,13 +10,44 @@ import (
 
 // Config holds all overseer configuration values.
 type Config struct {
-	Secrets SecretsConfig `mapstructure:"secrets"`
+	Secrets      SecretsConfig      `mapstructure:"secrets"`
+	Integrations IntegrationsConfig `mapstructure:"integrations"`
 }
 
 // SecretsConfig holds 1Password-related settings.
 type SecretsConfig struct {
 	Vault        string            `mapstructure:"vault"`
 	Environments map[string]string `mapstructure:"environments"`
+}
+
+// IntegrationsConfig holds all third-party integration configs.
+type IntegrationsConfig struct {
+	Jira   []JiraInstance    `mapstructure:"jira"`
+	Slack  []SlackWorkspace  `mapstructure:"slack"`
+	Google []GoogleAccount   `mapstructure:"google"`
+}
+
+// JiraInstance configures a single Jira instance.
+// Email and Token are op:// references resolved at runtime via secrets.Get.
+type JiraInstance struct {
+	Name    string `mapstructure:"name"`
+	BaseURL string `mapstructure:"base_url"`
+	Email   string `mapstructure:"email"` // op:// reference
+	Token   string `mapstructure:"token"` // op:// reference
+}
+
+// SlackWorkspace configures a single Slack workspace.
+// Token is an op:// reference resolved at runtime via secrets.Get.
+type SlackWorkspace struct {
+	Name  string `mapstructure:"name"`
+	Token string `mapstructure:"token"` // op:// reference
+}
+
+// GoogleAccount configures a single Google account for Calendar access.
+// CredentialsFile is a path to an OAuth2 credentials JSON file.
+type GoogleAccount struct {
+	Name            string `mapstructure:"name"`
+	CredentialsFile string `mapstructure:"credentials_file"`
 }
 
 // Path returns the path to the config file.

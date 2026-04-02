@@ -39,7 +39,6 @@ func runConfig(_ *cobra.Command, _ []string) error {
 	fmt.Printf("config file: %s\n\n", fileLink(path))
 	fmt.Printf("secrets:\n")
 	fmt.Printf("  vault: %s\n", cfg.Secrets.Vault)
-
 	if len(cfg.Secrets.Environments) > 0 {
 		fmt.Printf("  environments:\n")
 		keys := make([]string, 0, len(cfg.Secrets.Environments))
@@ -49,6 +48,25 @@ func runConfig(_ *cobra.Command, _ []string) error {
 		sort.Strings(keys)
 		for _, k := range keys {
 			fmt.Printf("    %s: %s\n", k, cfg.Secrets.Environments[k])
+		}
+	}
+
+	if len(cfg.Integrations.Jira) > 0 {
+		fmt.Printf("\njira:\n")
+		for _, j := range cfg.Integrations.Jira {
+			fmt.Printf("  - name: %s  base_url: %s\n", j.Name, j.BaseURL)
+		}
+	}
+	if len(cfg.Integrations.Slack) > 0 {
+		fmt.Printf("\nslack:\n")
+		for _, s := range cfg.Integrations.Slack {
+			fmt.Printf("  - name: %s\n", s.Name)
+		}
+	}
+	if len(cfg.Integrations.Google) > 0 {
+		fmt.Printf("\ngoogle:\n")
+		for _, g := range cfg.Integrations.Google {
+			fmt.Printf("  - name: %s  credentials: %s\n", g.Name, g.CredentialsFile)
 		}
 	}
 
