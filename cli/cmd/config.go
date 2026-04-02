@@ -36,7 +36,13 @@ func runConfig(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	fmt.Printf("config file: %s\n\n", fileLink(path))
+	localPath, err := config.LocalPath()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("config file:       %s\n", fileLink(path))
+	fmt.Printf("config file (local): %s\n\n", fileLink(localPath))
 	fmt.Printf("secrets:\n")
 	if len(cfg.Secrets.Environments) > 0 {
 		fmt.Printf("  environments:\n")
