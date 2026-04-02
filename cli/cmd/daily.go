@@ -92,7 +92,7 @@ func printGCal(ctx context.Context, account config.GoogleAccount) error {
 }
 
 func printSlack(ws config.SlackWorkspace) error {
-	token, err := secrets.Read(ws.Token)
+	token, err := secrets.ReadAs(ws.Token, ws.OPAccount)
 	if err != nil {
 		return err
 	}
@@ -120,11 +120,11 @@ func printSlack(ws config.SlackWorkspace) error {
 }
 
 func printJira(ctx context.Context, instance config.JiraInstance) error {
-	email, err := secrets.Read(instance.Email)
+	email, err := secrets.ReadAs(instance.Email, instance.OPAccount)
 	if err != nil {
 		return err
 	}
-	token, err := secrets.Read(instance.Token)
+	token, err := secrets.ReadAs(instance.Token, instance.OPAccount)
 	if err != nil {
 		return err
 	}

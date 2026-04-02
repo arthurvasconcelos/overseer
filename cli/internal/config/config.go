@@ -28,29 +28,32 @@ type IntegrationsConfig struct {
 
 // JiraInstance configures a single Jira instance.
 // Email and Token are op:// references resolved at runtime via secrets.Get.
+// OPAccount is the 1Password account ID to use (see: overseer accounts).
 type JiraInstance struct {
-	Name    string `mapstructure:"name"`
-	BaseURL string `mapstructure:"base_url"`
-	Email   string `mapstructure:"email"` // op:// reference
-	Token   string `mapstructure:"token"` // op:// reference
+	Name      string `mapstructure:"name"`
+	BaseURL   string `mapstructure:"base_url"`
+	Email     string `mapstructure:"email"`      // op:// reference
+	Token     string `mapstructure:"token"`      // op:// reference
+	OPAccount string `mapstructure:"op_account"` // optional 1Password account ID
 }
 
 // SlackWorkspace configures a single Slack workspace.
 // Token is an op:// reference resolved at runtime via secrets.Get.
+// OPAccount is the 1Password account ID to use (see: overseer accounts).
 type SlackWorkspace struct {
-	Name  string `mapstructure:"name"`
-	Token string `mapstructure:"token"` // op:// reference
+	Name      string `mapstructure:"name"`
+	Token     string `mapstructure:"token"`      // op:// reference
+	OPAccount string `mapstructure:"op_account"` // optional 1Password account ID
 }
 
 // GoogleAccount configures a single Google account for Calendar access.
 // CredentialsDoc is an op:// reference to a 1Password Document containing
 // the OAuth2 credentials JSON downloaded from Google Cloud Console.
-// OPAccount is the 1Password account URL to use (e.g. my.1password.com) —
-// required when the credentials live in a different account than the default.
+// OPAccount is the 1Password account ID to use (see: overseer accounts).
 type GoogleAccount struct {
 	Name           string `mapstructure:"name"`
 	CredentialsDoc string `mapstructure:"credentials_doc"`
-	OPAccount      string `mapstructure:"op_account"`
+	OPAccount      string `mapstructure:"op_account"` // optional 1Password account ID
 }
 
 // Path returns the path to the config file.
