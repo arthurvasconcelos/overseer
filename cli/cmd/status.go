@@ -14,7 +14,7 @@ import (
 	"github.com/arthurvasconcelos/overseer/internal/jira"
 	"github.com/arthurvasconcelos/overseer/internal/secrets"
 	overseerslack "github.com/arthurvasconcelos/overseer/internal/slack"
-	"github.com/charmbracelet/lipgloss"
+	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -27,13 +27,6 @@ var statusCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(statusCmd)
 }
-
-var (
-	styleOK   = lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Bold(true)
-	styleFail = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
-	styleName = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-	styleMsg  = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-)
 
 type checkResult struct {
 	name string
@@ -106,16 +99,16 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	}
 
 	for _, r := range results {
-		icon := styleOK.Render("✓")
+		icon := tui.StyleOK.Render("✓")
 		if !r.ok {
-			icon = styleFail.Render("✗")
+			icon = tui.StyleError.Render("✗")
 		}
 		padding := strings.Repeat(" ", maxLen-len(r.name)+2)
 		fmt.Printf("  %s%s%s  %s\n",
-			styleName.Render(r.name),
+			tui.StyleNormal.Render(r.name),
 			padding,
 			icon,
-			styleMsg.Render(r.msg),
+			tui.StyleDim.Render(r.msg),
 		)
 	}
 	return nil

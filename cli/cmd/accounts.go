@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 
+	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -48,10 +49,14 @@ func runAccounts(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("parsing accounts: %w", err)
 	}
 
-	fmt.Printf("%-30s  %-40s  %s\n", "ACCOUNT", "EMAIL", "USER ID (use as op_account)")
-	fmt.Printf("%-30s  %-40s  %s\n", "-------", "-----", "--------------------------")
+	header := fmt.Sprintf("  %-30s  %-40s  %s", "ACCOUNT", "EMAIL", "USER ID (use as op_account)")
+	fmt.Println(tui.StyleMuted.Render(header))
 	for _, a := range accounts {
-		fmt.Printf("%-30s  %-40s  %s\n", a.URL, a.Email, a.UserID)
+		fmt.Printf("  %s  %s  %s\n",
+			tui.StyleAccent.Render(fmt.Sprintf("%-30s", a.URL)),
+			tui.StyleNormal.Render(fmt.Sprintf("%-40s", a.Email)),
+			tui.StyleDim.Render(a.UserID),
+		)
 	}
 
 	return nil

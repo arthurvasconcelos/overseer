@@ -9,6 +9,8 @@ import (
 	"sync"
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
+	"github.com/arthurvasconcelos/overseer/internal/tui"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -82,7 +84,7 @@ func runReposStatus(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	if len(cfg.Repos) == 0 {
-		fmt.Println("no repos configured — add entries under repos: in config.yaml")
+		fmt.Println(tui.StyleMuted.Render("no repos configured — add entries under repos: in config.yaml"))
 		return nil
 	}
 
@@ -102,7 +104,8 @@ func runReposStatus(_ *cobra.Command, _ []string) error {
 
 	for _, r := range results {
 		if r.err != nil {
-			fmt.Printf("  [warn] %s: %v\n\n", r.name, r.err)
+			fmt.Println(tui.WarnLine(r.name, r.err.Error()))
+			fmt.Println()
 		} else {
 			fmt.Print(r.output)
 		}
@@ -116,7 +119,7 @@ func runReposPull(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	if len(cfg.Repos) == 0 {
-		fmt.Println("no repos configured — add entries under repos: in config.yaml")
+		fmt.Println(tui.StyleMuted.Render("no repos configured — add entries under repos: in config.yaml"))
 		return nil
 	}
 
@@ -136,7 +139,8 @@ func runReposPull(_ *cobra.Command, _ []string) error {
 
 	for _, r := range results {
 		if r.err != nil {
-			fmt.Printf("  [warn] %s: %v\n\n", r.name, r.err)
+			fmt.Println(tui.WarnLine(r.name, r.err.Error()))
+			fmt.Println()
 		} else {
 			fmt.Print(r.output)
 		}
@@ -176,14 +180,15 @@ func repoStatus(home string, repo config.RepoConfig) repoResult {
 	path := repoRoot(home, repo.Path)
 	var sb strings.Builder
 
-	ro := ""
+	badge := ""
 	if repo.Readonly {
-		ro = " (readonly)"
+		badge = tui.StyleMuted.Render("readonly")
 	}
-	fmt.Fprintf(&sb, "%s%s\n", repo.Name, ro)
+	fmt.Fprintln(&sb, tui.SectionHeader(repo.Name, badge))
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		fmt.Fprintf(&sb, "  not cloned — run: overseer repos pull\n\n")
+		fmt.Fprintln(&sb, "  "+tui.StyleMuted.Render("not cloned — run: overseer repos pull"))
+		fmt.Fprintln(&sb)
 		return repoResult{name: repo.Name, output: sb.String()}
 	}
 
@@ -194,7 +199,7 @@ func repoStatus(home string, repo config.RepoConfig) repoResult {
 
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	for _, line := range lines {
-		fmt.Fprintf(&sb, "  %s\n", line)
+		fmt.Fprintf(&sb, "  %s\n", colorGitStatusLine(line))
 	}
 	fmt.Fprintln(&sb)
 
@@ -205,21 +210,21 @@ func repoPull(home string, repo config.RepoConfig, cfg *config.Config) repoResul
 	path := repoRoot(home, repo.Path)
 	var sb strings.Builder
 
-	ro := ""
+	badge := ""
 	if repo.Readonly {
-		ro = " (readonly)"
+		badge = tui.StyleMuted.Render("readonly")
 	}
-	fmt.Fprintf(&sb, "%s%s\n", repo.Name, ro)
+	fmt.Fprintln(&sb, tui.SectionHeader(repo.Name, badge))
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		fmt.Fprintf(&sb, "  cloning %s...\n", repo.URL)
+		fmt.Fprintf(&sb, "  %s\n", tui.StyleMuted.Render("cloning "+repo.URL+"..."))
 		out, err := git("clone", repo.URL, path)
 		if err != nil {
 			return repoResult{name: repo.Name, err: fmt.Errorf("clone failed: %s", out)}
 		}
-		fmt.Fprintf(&sb, "  cloned\n")
+		fmt.Fprintf(&sb, "  %s\n", tui.StyleOK.Render("cloned"))
 		if msg := applyRepoProfile(path, repo, cfg); msg != "" {
-			fmt.Fprintf(&sb, "  %s\n", msg)
+			fmt.Fprintf(&sb, "  %s\n", tui.StyleDim.Render(msg))
 		}
 		fmt.Fprintln(&sb)
 		return repoResult{name: repo.Name, output: sb.String()}
@@ -229,9 +234,31 @@ func repoPull(home string, repo config.RepoConfig, cfg *config.Config) repoResul
 	if err != nil {
 		return repoResult{name: repo.Name, err: fmt.Errorf("pull failed: %s", strings.TrimSpace(out))}
 	}
-	fmt.Fprintf(&sb, "  %s\n\n", strings.TrimSpace(out))
+	fmt.Fprintf(&sb, "  %s\n\n", tui.StyleDim.Render(strings.TrimSpace(out)))
 
 	return repoResult{name: repo.Name, readonly: repo.Readonly, output: sb.String()}
+}
+
+// colorGitStatusLine applies colour to a single line of `git status --short --branch` output.
+func colorGitStatusLine(line string) string {
+	if len(line) < 2 {
+		return line
+	}
+	xy := line[:2]
+	switch {
+	case xy == "##":
+		return tui.StyleMuted.Render(line)
+	case strings.ContainsAny(xy, "M"):
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render(line) // amber — modified
+	case strings.ContainsAny(xy, "A"):
+		return tui.StyleOK.Render(line) // green — added
+	case strings.ContainsAny(xy, "D"):
+		return tui.StyleError.Render(line) // red — deleted
+	case xy == "??":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Render(line) // blue — untracked
+	default:
+		return tui.StyleNormal.Render(line)
+	}
 }
 
 // applyRepoProfile applies the git_profile configured for a repo.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/arthurvasconcelos/overseer/internal/jira"
 	"github.com/arthurvasconcelos/overseer/internal/secrets"
 	overseerslack "github.com/arthurvasconcelos/overseer/internal/slack"
+	"github.com/arthurvasconcelos/overseer/internal/tui"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -41,7 +44,8 @@ func runDaily(_ *cobra.Command, _ []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	fmt.Printf("overseer daily — %s\n\n", time.Now().Format("Monday, 02 Jan 2006"))
+	fmt.Println(tui.StyleHeader.Render("overseer daily") + "  " + tui.StyleMuted.Render(time.Now().Format("Monday, 02 Jan 2006")))
+	fmt.Println()
 
 	// Build one task per configured integration instance.
 	type task struct {
@@ -108,7 +112,8 @@ func runDaily(_ *cobra.Command, _ []string) error {
 	// Print in original order.
 	for i, t := range tasks {
 		if results[i].err != nil {
-			fmt.Printf("  [warn] %s: %v\n\n", t.label, results[i].err)
+			fmt.Println(tui.WarnLine(t.label, results[i].err.Error()))
+			fmt.Println()
 		} else {
 			fmt.Print(results[i].buf.String())
 		}
@@ -133,16 +138,22 @@ func printGCal(ctx context.Context, account config.GoogleAccount, w *bytes.Buffe
 		return err
 	}
 
-	fmt.Fprintf(w, "Google Calendar — %s (%d events today)\n", account.Name, len(events))
+	badge := fmt.Sprintf("%d event today", len(events))
+	if len(events) != 1 {
+		badge = fmt.Sprintf("%d events today", len(events))
+	}
+	fmt.Fprintln(w, tui.SectionHeader("Google Calendar / "+account.Name, badge))
 	if len(events) == 0 {
-		fmt.Fprintf(w, "  no events today\n")
+		fmt.Fprintln(w, "  "+tui.StyleMuted.Render("no events today"))
 	}
 	for _, e := range events {
+		var timeCol string
 		if e.AllDay {
-			fmt.Fprintf(w, "  all day       %s\n", e.Title)
+			timeCol = tui.StyleMuted.Render("all day      ")
 		} else {
-			fmt.Fprintf(w, "  %s – %s  %s\n", e.Start.Format("15:04"), e.End.Format("15:04"), e.Title)
+			timeCol = tui.StyleAccent.Render(e.Start.Format("15:04") + " – " + e.End.Format("15:04"))
 		}
+		fmt.Fprintf(w, "  %s  %s\n", timeCol, tui.StyleNormal.Render(e.Title))
 	}
 	fmt.Fprintln(w)
 
@@ -162,13 +173,13 @@ func printSlack(ws config.SlackWorkspace, w *bytes.Buffer) error {
 		return err
 	}
 
-	fmt.Fprintf(w, "Slack — %s\n", ws.Name)
+	fmt.Fprintln(w, tui.SectionHeader("Slack / "+ws.Name, ""))
 	if len(mentions) == 0 {
-		fmt.Fprintf(w, "  no recent mentions\n")
+		fmt.Fprintln(w, "  "+tui.StyleMuted.Render("no recent mentions"))
 	} else {
-		fmt.Fprintf(w, "  mentions:\n")
 		for _, m := range mentions {
-			fmt.Fprintf(w, "    #%-20s  %s\n", m.Channel, m.Text)
+			channel := tui.StyleAccent.Render("#" + m.Channel)
+			fmt.Fprintf(w, "  %-30s  %s\n", channel, tui.StyleNormal.Render(m.Text))
 		}
 	}
 	fmt.Fprintln(w)
@@ -192,14 +203,44 @@ func printJira(ctx context.Context, instance config.JiraInstance, w *bytes.Buffe
 		return err
 	}
 
-	fmt.Fprintf(w, "Jira — %s (%d open)\n", instance.Name, len(issues))
+	badge := fmt.Sprintf("%d open", len(issues))
+	fmt.Fprintln(w, tui.SectionHeader("Jira / "+instance.Name, badge))
 	if len(issues) == 0 {
-		fmt.Fprintf(w, "  no open issues\n")
+		fmt.Fprintln(w, "  "+tui.StyleMuted.Render("no open issues"))
 	}
 	for _, i := range issues {
-		fmt.Fprintf(w, "  %-12s  %-14s  %-10s  %s\n", i.Key, i.Status, i.Priority, i.Summary)
+		key := tui.StyleAccent.Render(fmt.Sprintf("%-12s", i.Key))
+		status := jiraStatusStyle(i.Status).Render(fmt.Sprintf("%-14s", i.Status))
+		priority := jiraPriorityStyle(i.Priority).Render(fmt.Sprintf("%-10s", i.Priority))
+		fmt.Fprintf(w, "  %s  %s  %s  %s\n", key, status, priority, tui.StyleNormal.Render(i.Summary))
 	}
 	fmt.Fprintln(w)
 
 	return nil
+}
+
+func jiraStatusStyle(status string) lipgloss.Style {
+	switch strings.ToLower(status) {
+	case "in progress":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("214")) // amber
+	case "in review", "code review":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("39")) // blue
+	case "done", "closed", "resolved":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("82")) // green
+	default:
+		return tui.StyleDim
+	}
+}
+
+func jiraPriorityStyle(priority string) lipgloss.Style {
+	switch strings.ToLower(priority) {
+	case "critical", "highest":
+		return tui.StyleError
+	case "high":
+		return tui.StyleWarn
+	case "medium":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("228")) // soft yellow
+	default:
+		return tui.StyleMuted
+	}
 }

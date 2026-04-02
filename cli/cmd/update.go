@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -60,8 +61,7 @@ func printUpdateNotice() {
 	select {
 	case tag := <-updateCheckResult:
 		if tag != "" {
-			fmt.Printf("\n\033[33mA new version is available: %s → %s\033[0m\n", Version, tag)
-			fmt.Printf("\033[33mRun \033[1moverseer update\033[0m\033[33m to upgrade.\033[0m\n")
+			fmt.Println(tui.UpdateNotice(Version, tag))
 		}
 	case <-time.After(500 * time.Millisecond):
 		// Check didn't finish in time — skip silently to avoid delaying the user.
@@ -71,7 +71,7 @@ func printUpdateNotice() {
 func runUpdate(_ *cobra.Command, _ []string) error {
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	fmt.Println("checking for updates...")
+	fmt.Println(tui.StyleMuted.Render("checking for updates..."))
 
 	latestTag, err := fetchLatestTag(client)
 	if err != nil {
@@ -81,13 +81,13 @@ func runUpdate(_ *cobra.Command, _ []string) error {
 	currentVersion := trimV(Version)
 
 	if currentVersion == latestVersion {
-		fmt.Printf("already up to date (%s)\n", Version)
+		fmt.Println(tui.StyleOK.Render("✓") + "  already up to date " + tui.StyleMuted.Render("("+Version+")"))
 		return nil
 	}
 	if currentVersion == "dev" {
-		fmt.Printf("running dev build — installing %s\n", latestTag)
+		fmt.Println(tui.StyleDim.Render("running dev build — installing " + latestTag))
 	} else {
-		fmt.Printf("update available: %s → %s\n", Version, latestTag)
+		fmt.Println(tui.StyleWarn.Render("update available: "+Version+" → "+latestTag))
 	}
 
 	installDir := filepath.Join(os.Getenv("HOME"), "bin")
@@ -95,7 +95,7 @@ func runUpdate(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	fmt.Printf("updated to %s\n", latestTag)
+	fmt.Println(tui.StyleOK.Render("✓") + "  updated to " + tui.StyleAccent.Render(latestTag))
 	return nil
 }
 
