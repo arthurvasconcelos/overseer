@@ -8,6 +8,11 @@ import (
 	"github.com/spf13/viper"
 )
 
+// BrewConfig holds Homebrew-related settings.
+type BrewConfig struct {
+	Brewfile string `mapstructure:"brewfile"` // path relative to overseer_home; defaults to "Brewfile"
+}
+
 // Config holds all overseer configuration values.
 type Config struct {
 	Secrets      SecretsConfig      `mapstructure:"secrets"`
@@ -15,6 +20,7 @@ type Config struct {
 	Git          GitConfig          `mapstructure:"git"`
 	System       SystemConfig       `mapstructure:"system"`
 	Obsidian     ObsidianConfig     `mapstructure:"obsidian"`
+	Brew         BrewConfig         `mapstructure:"brew"`
 	Repos        []RepoConfig       `mapstructure:"repos"`
 }
 

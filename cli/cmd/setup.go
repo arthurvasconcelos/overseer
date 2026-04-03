@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/arthurvasconcelos/overseer/internal/symlink"
+	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -57,6 +59,14 @@ func runSetup(_ *cobra.Command, _ []string) error {
 	for _, l := range links {
 		if err := symlink.Make(l.src, l.dst, dryRun); err != nil {
 			return fmt.Errorf("symlinking %s: %w", l.dst, err)
+		}
+	}
+
+	// Brew install — macOS only, skipped on other platforms.
+	if runtime.GOOS == "darwin" && brewAvailable() {
+		fmt.Println()
+		if err := runBrewInstall(nil, nil); err != nil {
+			fmt.Println(tui.WarnLine("brew", err.Error()))
 		}
 	}
 

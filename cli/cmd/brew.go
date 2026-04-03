@@ -1,0 +1,201 @@
+package cmd
+
+import (
+	"bufio"
+	"bytes"
+	"fmt"
+	"os"
+	"os/exec"
+	"runtime"
+	"strings"
+
+	"github.com/arthurvasconcelos/overseer/internal/config"
+	"github.com/arthurvasconcelos/overseer/internal/tui"
+	"github.com/spf13/cobra"
+)
+
+var brewCmd = &cobra.Command{
+	Use:   "brew",
+	Short: "Manage Homebrew packages via Brewfile",
+}
+
+var brewCheckCmd = &cobra.Command{
+	Use:   "check",
+	Short: "Show which Brewfile packages are missing",
+	RunE:  runBrewCheck,
+}
+
+var brewInstallCmd = &cobra.Command{
+	Use:   "install",
+	Short: "Install missing Brewfile packages",
+	RunE:  runBrewInstall,
+}
+
+var brewDumpCmd = &cobra.Command{
+	Use:   "dump",
+	Short: "Overwrite Brewfile with currently installed packages",
+	RunE:  runBrewDump,
+}
+
+func init() {
+	brewCmd.AddCommand(brewCheckCmd)
+	brewCmd.AddCommand(brewInstallCmd)
+	brewCmd.AddCommand(brewDumpCmd)
+	rootCmd.AddCommand(brewCmd)
+}
+
+func brewfilePath(cfg *config.Config) string {
+	path := cfg.Brew.Brewfile
+	if path == "" {
+		path = "Brewfile"
+	}
+	return repoRoot(resolveOverseerHome(cfg), path)
+}
+
+func brewAvailable() bool {
+	_, err := exec.LookPath("brew")
+	return err == nil
+}
+
+func requireBrew() bool {
+	if !brewAvailable() {
+		if runtime.GOOS == "linux" {
+			fmt.Println(tui.StyleMuted.Render("Homebrew is not available — Linux package management is not yet supported"))
+		} else {
+			fmt.Println(tui.StyleWarn.Render("⚠  Homebrew not found — install it from https://brew.sh"))
+		}
+		return false
+	}
+	return true
+}
+
+// --- check ---
+
+func runBrewCheck(_ *cobra.Command, _ []string) error {
+	if !requireBrew() {
+		return nil
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	path := brewfilePath(cfg)
+
+	fmt.Println(tui.SectionHeader("brew check", path))
+	fmt.Println()
+
+	cmd := exec.Command("brew", "bundle", "check", "--verbose", "--file="+path)
+	cmd.Env = append(os.Environ(), "HOMEBREW_NO_AUTO_UPDATE=1")
+	out, err := cmd.CombinedOutput()
+
+	if err == nil {
+		fmt.Println("  " + tui.StyleOK.Render("✓") + "  " + tui.StyleNormal.Render("all packages satisfied"))
+		return nil
+	}
+
+	var missing int
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "→") {
+			continue
+		}
+		// "→ Formula git needs to be installed or updated." → "git"
+		clean := line
+		for _, prefix := range []string{"→ Formula ", "→ Cask ", "→ Tap ", "→ "} {
+			clean = strings.TrimPrefix(clean, prefix)
+		}
+		clean = strings.TrimSuffix(clean, " needs to be installed or updated.")
+		fmt.Println("  " + tui.StyleError.Render("✗") + "  " + tui.StyleNormal.Render(clean))
+		missing++
+	}
+
+	fmt.Println()
+	fmt.Println("  " + tui.StyleError.Render(fmt.Sprintf("%d missing", missing)) +
+		"  " + tui.StyleMuted.Render("run: overseer brew install"))
+	return nil
+}
+
+// --- install ---
+
+func runBrewInstall(_ *cobra.Command, _ []string) error {
+	if !requireBrew() {
+		return nil
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	path := brewfilePath(cfg)
+
+	fmt.Println(tui.SectionHeader("brew install", path))
+	fmt.Println()
+
+	cmd := exec.Command("brew", "bundle", "install", "--file="+path)
+	cmd.Env = append(os.Environ(), "HOMEBREW_NO_AUTO_UPDATE=1")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("brew bundle install failed: %w", err)
+	}
+	fmt.Println()
+	fmt.Println(tui.StyleOK.Render("✓") + "  all packages installed")
+	return nil
+}
+
+// --- dump ---
+
+func runBrewDump(_ *cobra.Command, _ []string) error {
+	if !requireBrew() {
+		return nil
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	path := brewfilePath(cfg)
+
+	fmt.Printf("this will overwrite %s with all currently installed packages\n\n", tui.StyleAccent.Render(path))
+
+	idx, err := tui.Select("continue?", []tui.SelectItem{
+		{Title: "yes", Subtitle: "overwrite Brewfile"},
+		{Title: "no", Subtitle: "cancel"},
+	})
+	if err != nil || idx != 0 {
+		fmt.Println(tui.StyleMuted.Render("cancelled"))
+		return nil
+	}
+	fmt.Println()
+
+	dumpCmd := exec.Command("brew", "bundle", "dump", "--force", "--file="+path)
+	dumpCmd.Env = append(os.Environ(), "HOMEBREW_NO_AUTO_UPDATE=1")
+	out, err := dumpCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("brew bundle dump: %s", strings.TrimSpace(string(out)))
+	}
+
+	count := countBrewfileEntries(path)
+	fmt.Printf("%s  wrote %s\n",
+		tui.StyleOK.Render("✓"),
+		tui.StyleNormal.Render(fmt.Sprintf("%s (%d entries)", path, count)),
+	)
+	return nil
+}
+
+func countBrewfileEntries(path string) int {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	count := 0
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" && !strings.HasPrefix(line, "#") {
+			count++
+		}
+	}
+	return count
+}
