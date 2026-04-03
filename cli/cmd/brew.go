@@ -52,6 +52,18 @@ func brewfilePath(cfg *config.Config) string {
 	return repoRoot(resolveOverseerHome(cfg), path)
 }
 
+// brewfilePaths returns the active Brewfile paths: always the main one,
+// plus Brewfile.local if it exists alongside it.
+func brewfilePaths(cfg *config.Config) []string {
+	main := brewfilePath(cfg)
+	paths := []string{main}
+	local := main + ".local"
+	if _, err := os.Stat(local); err == nil {
+		paths = append(paths, local)
+	}
+	return paths
+}
+
 func brewAvailable() bool {
 	_, err := exec.LookPath("brew")
 	return err == nil
@@ -80,39 +92,45 @@ func runBrewCheck(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	path := brewfilePath(cfg)
+	paths := brewfilePaths(cfg)
 
-	fmt.Println(tui.SectionHeader("brew check", path))
+	label := strings.Join(paths, " + ")
+	fmt.Println(tui.SectionHeader("brew check", label))
 	fmt.Println()
 
-	cmd := exec.Command("brew", "bundle", "check", "--verbose", "--file="+path)
-	cmd.Env = append(os.Environ(), "HOMEBREW_NO_AUTO_UPDATE=1")
-	out, err := cmd.CombinedOutput()
+	totalMissing := 0
+	allSatisfied := true
 
-	if err == nil {
+	for _, path := range paths {
+		cmd := exec.Command("brew", "bundle", "check", "--verbose", "--file="+path)
+		cmd.Env = append(os.Environ(), "HOMEBREW_NO_AUTO_UPDATE=1")
+		out, err := cmd.CombinedOutput()
+
+		if err != nil {
+			allSatisfied = false
+			for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+				line = strings.TrimSpace(line)
+				if !strings.HasPrefix(line, "→") {
+					continue
+				}
+				clean := line
+				for _, prefix := range []string{"→ Formula ", "→ Cask ", "→ Tap ", "→ "} {
+					clean = strings.TrimPrefix(clean, prefix)
+				}
+				clean = strings.TrimSuffix(clean, " needs to be installed or updated.")
+				fmt.Println("  " + tui.StyleError.Render("✗") + "  " + tui.StyleNormal.Render(clean))
+				totalMissing++
+			}
+		}
+	}
+
+	fmt.Println()
+	if allSatisfied {
 		fmt.Println("  " + tui.StyleOK.Render("✓") + "  " + tui.StyleNormal.Render("all packages satisfied"))
-		return nil
+	} else {
+		fmt.Println("  " + tui.StyleError.Render(fmt.Sprintf("%d missing", totalMissing)) +
+			"  " + tui.StyleMuted.Render("run: overseer brew install"))
 	}
-
-	var missing int
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "→") {
-			continue
-		}
-		// "→ Formula git needs to be installed or updated." → "git"
-		clean := line
-		for _, prefix := range []string{"→ Formula ", "→ Cask ", "→ Tap ", "→ "} {
-			clean = strings.TrimPrefix(clean, prefix)
-		}
-		clean = strings.TrimSuffix(clean, " needs to be installed or updated.")
-		fmt.Println("  " + tui.StyleError.Render("✗") + "  " + tui.StyleNormal.Render(clean))
-		missing++
-	}
-
-	fmt.Println()
-	fmt.Println("  " + tui.StyleError.Render(fmt.Sprintf("%d missing", missing)) +
-		"  " + tui.StyleMuted.Render("run: overseer brew install"))
 	return nil
 }
 
@@ -127,18 +145,22 @@ func runBrewInstall(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	path := brewfilePath(cfg)
+	paths := brewfilePaths(cfg)
 
-	fmt.Println(tui.SectionHeader("brew install", path))
+	label := strings.Join(paths, " + ")
+	fmt.Println(tui.SectionHeader("brew install", label))
 	fmt.Println()
 
-	cmd := exec.Command("brew", "bundle", "install", "--file="+path)
-	cmd.Env = append(os.Environ(), "HOMEBREW_NO_AUTO_UPDATE=1")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("brew bundle install failed: %w", err)
+	for _, path := range paths {
+		cmd := exec.Command("brew", "bundle", "install", "--file="+path)
+		cmd.Env = append(os.Environ(), "HOMEBREW_NO_AUTO_UPDATE=1")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("brew bundle install %s: %w", path, err)
+		}
 	}
+
 	fmt.Println()
 	fmt.Println(tui.StyleOK.Render("✓") + "  all packages installed")
 	return nil
@@ -155,6 +177,7 @@ func runBrewDump(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	// dump always targets the main Brewfile only — Brewfile.local is managed manually
 	path := brewfilePath(cfg)
 
 	fmt.Printf("this will overwrite %s with all currently installed packages\n\n", tui.StyleAccent.Render(path))

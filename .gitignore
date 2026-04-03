@@ -3,3 +3,4 @@
 *.swo
 *~
 repos/
+Brewfile.local
