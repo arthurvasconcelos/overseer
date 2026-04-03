@@ -37,6 +37,25 @@ type IntegrationsConfig struct {
 	Jira   []JiraInstance    `mapstructure:"jira"`
 	Slack  []SlackWorkspace  `mapstructure:"slack"`
 	Google []GoogleAccount   `mapstructure:"google"`
+	GitHub []GitHubInstance  `mapstructure:"github"`
+	GitLab []GitLabInstance  `mapstructure:"gitlab"`
+}
+
+// GitHubInstance configures a single GitHub account.
+// Token is an op:// reference to a Personal Access Token.
+type GitHubInstance struct {
+	Name      string `mapstructure:"name"`
+	Token     string `mapstructure:"token"`      // op:// reference
+	OPAccount string `mapstructure:"op_account"` // optional 1Password account ID
+}
+
+// GitLabInstance configures a single GitLab instance.
+// Token is an op:// reference to a Personal Access Token.
+type GitLabInstance struct {
+	Name      string `mapstructure:"name"`
+	BaseURL   string `mapstructure:"base_url"`   // default: https://gitlab.com
+	Token     string `mapstructure:"token"`      // op:// reference
+	OPAccount string `mapstructure:"op_account"` // optional 1Password account ID
 }
 
 // JiraInstance configures a single Jira instance.

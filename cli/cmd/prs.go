@@ -1,0 +1,173 @@
+package cmd
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/arthurvasconcelos/overseer/internal/config"
+	"github.com/arthurvasconcelos/overseer/internal/github"
+	"github.com/arthurvasconcelos/overseer/internal/gitlab"
+	"github.com/arthurvasconcelos/overseer/internal/secrets"
+	"github.com/arthurvasconcelos/overseer/internal/tui"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/spf13/cobra"
+)
+
+var prsCmd = &cobra.Command{
+	Use:   "prs",
+	Short: "Open pull requests and merge requests across GitHub and GitLab",
+	RunE:  runPRs,
+}
+
+func init() {
+	rootCmd.AddCommand(prsCmd)
+}
+
+func runPRs(_ *cobra.Command, _ []string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	if len(cfg.Integrations.GitHub) == 0 && len(cfg.Integrations.GitLab) == 0 {
+		fmt.Println(tui.StyleMuted.Render("no GitHub or GitLab instances configured"))
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	type task struct {
+		label string
+		run   func() (string, error)
+	}
+
+	var tasks []task
+
+	for _, inst := range cfg.Integrations.GitHub {
+		inst := inst
+		tasks = append(tasks, task{
+			label: "github/" + inst.Name,
+			run: func() (string, error) {
+				var b bytes.Buffer
+				if err := printGitHubPRs(ctx, inst, &b); err != nil {
+					return "", err
+				}
+				return b.String(), nil
+			},
+		})
+	}
+
+	for _, inst := range cfg.Integrations.GitLab {
+		inst := inst
+		tasks = append(tasks, task{
+			label: "gitlab/" + inst.Name,
+			run: func() (string, error) {
+				var b bytes.Buffer
+				if err := printGitLabMRs(ctx, inst, &b); err != nil {
+					return "", err
+				}
+				return b.String(), nil
+			},
+		})
+	}
+
+	results := make([]section, len(tasks))
+	var wg sync.WaitGroup
+	for i, t := range tasks {
+		i, t := i, t
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			out, err := t.run()
+			results[i].buf.WriteString(out)
+			results[i].err = err
+		}()
+	}
+	wg.Wait()
+
+	for i, t := range tasks {
+		if results[i].err != nil {
+			fmt.Println(tui.WarnLine(t.label, results[i].err.Error()))
+			fmt.Println()
+		} else {
+			fmt.Print(results[i].buf.String())
+		}
+	}
+	return nil
+}
+
+func printGitHubPRs(ctx context.Context, inst config.GitHubInstance, w *bytes.Buffer) error {
+	token, err := secrets.ReadAs(inst.Token, inst.OPAccount)
+	if err != nil {
+		return err
+	}
+
+	prs, err := github.New(token).MyPRs(ctx)
+	if err != nil {
+		return err
+	}
+
+	badge := fmt.Sprintf("%d open", len(prs))
+	fmt.Fprintln(w, tui.SectionHeader("GitHub / "+inst.Name, badge))
+
+	if len(prs) == 0 {
+		fmt.Fprintln(w, "  "+tui.StyleMuted.Render("no open pull requests"))
+	}
+	for _, pr := range prs {
+		fmt.Fprintf(w, "  %s  %s  %s\n",
+			tui.StyleDim.Render(fmt.Sprintf("%-35s", pr.Repo)),
+			prBadge(pr.Draft, ""),
+			tui.StyleNormal.Render(fmt.Sprintf("#%-4d %s", pr.Number, pr.Title)),
+		)
+	}
+	fmt.Fprintln(w)
+	return nil
+}
+
+func printGitLabMRs(ctx context.Context, inst config.GitLabInstance, w *bytes.Buffer) error {
+	token, err := secrets.ReadAs(inst.Token, inst.OPAccount)
+	if err != nil {
+		return err
+	}
+
+	mrs, err := gitlab.New(inst.BaseURL, token).MyMRs(ctx)
+	if err != nil {
+		return err
+	}
+
+	badge := fmt.Sprintf("%d open", len(mrs))
+	fmt.Fprintln(w, tui.SectionHeader("GitLab / "+inst.Name, badge))
+
+	if len(mrs) == 0 {
+		fmt.Fprintln(w, "  "+tui.StyleMuted.Render("no open merge requests"))
+	}
+	for _, mr := range mrs {
+		fmt.Fprintf(w, "  %s  %s  %s\n",
+			tui.StyleDim.Render(fmt.Sprintf("%-35s", mr.Project)),
+			prBadge(mr.Draft, mr.Status),
+			tui.StyleNormal.Render(fmt.Sprintf("!%-4d %s", mr.IID, mr.Title)),
+		)
+	}
+	fmt.Fprintln(w)
+	return nil
+}
+
+// prBadge returns a coloured status badge for a PR/MR.
+func prBadge(draft bool, mergeStatus string) string {
+	if draft {
+		return tui.StyleMuted.Render("draft    ")
+	}
+	switch strings.ToLower(mergeStatus) {
+	case "cannot_be_merged":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Render("conflicts")
+	case "can_be_merged":
+		return tui.StyleOK.Render("ready    ")
+	default:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Render("open     ")
+	}
+}
