@@ -21,6 +21,10 @@ var updateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Update overseer to the latest release",
 	RunE:  runUpdate,
+	// Suppress the background update check and post-run notice — this command
+	// already handles version checking and updating explicitly.
+	PersistentPreRun:  func(*cobra.Command, []string) {},
+	PersistentPostRun: func(*cobra.Command, []string) {},
 }
 
 func init() {

@@ -43,3 +43,17 @@ func UpdateNotice(current, latest string) string {
 	line2 := StyleMuted.Render("Run ") + StyleWarn.Bold(true).Render("overseer update") + StyleMuted.Render(" to upgrade.")
 	return "\n" + line1 + "\n" + line2
 }
+
+// Logo renders the overseer wordmark as a styled rounded box with an optional
+// version badge. Pass an empty string or "dev" to omit the badge.
+func Logo(version string) string {
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("99")).
+		Padding(0, 1).
+		Render(StyleHeader.Render("▸ O V E R S E E R"))
+	if version != "" && version != "dev" {
+		return box + "  " + StyleMuted.Render(version)
+	}
+	return box
+}
