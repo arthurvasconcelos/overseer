@@ -71,6 +71,7 @@ func registerPlugins() {
 			rootCmd.AddCommand(&cobra.Command{
 				Use:                pluginName,
 				Short:              short,
+				Annotations:        map[string]string{"overseer/plugin": "true"},
 				DisableFlagParsing: true,
 				RunE: func(_ *cobra.Command, args []string) error {
 					return execPlugin(binPath, manifest, args)
