@@ -1,0 +1,5 @@
+# brain/overseer/Brewfile.local — machine-specific packages.
+# Copy to Brewfile.local (gitignored) and add packages only needed on this machine.
+# Run: overseer brew install
+
+# brew "some-local-tool"

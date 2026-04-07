@@ -27,6 +27,30 @@ func getBackupDir() string {
 	return backupDir
 }
 
+// MakeAll walks dotfilesDir and creates a symlink under homeDir for every file
+// found, preserving the relative path. A file at dotfilesDir/shell/.zshrc
+// becomes a symlink at homeDir/.zshrc (homeDir/shell/.zshrc if shell/ is not
+// the convention you want — but overseer strips no prefix; callers pass the
+// correct dotfilesDir).
+//
+// Convention: brain/overseer/dotfiles/ mirrors ~/  so the relative path from
+// dotfilesDir to each file is also the relative path from homeDir.
+func MakeAll(dotfilesDir, homeDir string, dryRun bool) error {
+	return filepath.WalkDir(dotfilesDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(dotfilesDir, path)
+		if err != nil {
+			return err
+		}
+		return Make(path, filepath.Join(homeDir, rel), dryRun)
+	})
+}
+
 // Make creates a symlink at target pointing to source, idempotently.
 // If dryRun is true no filesystem changes are made, but output is printed.
 func Make(source, target string, dryRun bool) error {

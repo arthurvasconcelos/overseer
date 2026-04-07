@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+
 var brewCmd = &cobra.Command{
 	Use:   "brew",
 	Short: "Manage Homebrew packages via Brewfile",
@@ -45,17 +46,32 @@ func init() {
 }
 
 func brewfilePath(cfg *config.Config) string {
-	path := cfg.Brew.Brewfile
-	if path == "" {
-		path = "Brewfile"
+	if cfg.Brew.Brewfile != "" {
+		// Explicit override in config — resolve relative to overseer_home.
+		return repoRoot(resolveOverseerHome(cfg), cfg.Brew.Brewfile)
 	}
-	return repoRoot(resolveOverseerHome(cfg), path)
+	return fmt.Sprintf("%s/Brewfile", config.BrainOverseerPath(cfg))
+}
+
+// requireBrewfile checks that the Brewfile exists at the resolved path and
+// prints a helpful error if it does not.
+func requireBrewfile(cfg *config.Config) (string, bool) {
+	path := brewfilePath(cfg)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		fmt.Println(tui.WarnLine("brew", fmt.Sprintf("Brewfile not found at %s — configure brain_path and run: overseer brain init", path)))
+		return path, false
+	}
+	return path, true
 }
 
 // brewfilePaths returns the active Brewfile paths: always the main one,
 // plus Brewfile.local if it exists alongside it.
+// Returns nil if the main Brewfile does not exist.
 func brewfilePaths(cfg *config.Config) []string {
-	main := brewfilePath(cfg)
+	main, ok := requireBrewfile(cfg)
+	if !ok {
+		return nil
+	}
 	paths := []string{main}
 	local := main + ".local"
 	if _, err := os.Stat(local); err == nil {
@@ -93,6 +109,9 @@ func runBrewCheck(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	paths := brewfilePaths(cfg)
+	if paths == nil {
+		return nil
+	}
 
 	label := strings.Join(paths, " + ")
 	fmt.Println(tui.SectionHeader("brew check", label))
@@ -146,6 +165,9 @@ func runBrewInstall(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	paths := brewfilePaths(cfg)
+	if paths == nil {
+		return nil
+	}
 
 	label := strings.Join(paths, " + ")
 	fmt.Println(tui.SectionHeader("brew install", label))
@@ -178,7 +200,10 @@ func runBrewDump(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	// dump always targets the main Brewfile only — Brewfile.local is managed manually
-	path := brewfilePath(cfg)
+	path, ok := requireBrewfile(cfg)
+	if !ok {
+		return nil
+	}
 
 	fmt.Printf("this will overwrite %s with all currently installed packages\n\n", tui.StyleAccent.Render(path))
 

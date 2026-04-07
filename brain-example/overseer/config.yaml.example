@@ -1,0 +1,71 @@
+# overseer brain config — portable, version-controlled personal config.
+# Copy to config.yaml and fill in your values.
+# Full reference: https://github.com/arthurvasconcelos/overseer
+
+# --- Secrets (1Password) ---
+# secrets:
+#   environments:
+#     work: <1password-account-id>   # see: overseer accounts
+
+# --- Integrations ---
+# integrations:
+#   jira:
+#     - name: work
+#       base_url: https://yourorg.atlassian.net
+#       email: op://Vault/Jira/username
+#       token: op://Vault/Jira/credential
+#       op_account: <1password-account-id>
+#
+#   slack:
+#     - name: work
+#       token: op://Vault/Slack Bot Token/credential
+#       op_account: <1password-account-id>
+#
+#   github:
+#     - name: personal
+#       token: op://Vault/GitHub PAT/credential
+#
+#   gitlab:
+#     - name: work
+#       base_url: https://gitlab.yourorg.com
+#       token: op://Vault/GitLab PAT/credential
+#       op_account: <1password-account-id>
+
+# --- Git identity profiles ---
+# git:
+#   defaults:
+#     gpg_format: ssh
+#     commit_gpgsign: true
+#   profiles:
+#     - name: personal
+#       email: you@example.com
+#       signing_key: op://Vault/SSH Signing Key/public key
+#       op_account: <1password-account-id>
+#     - name: work
+#       email: you@company.com
+#       signing_key: op://Vault/Work SSH Signing Key/public key
+#       op_account: <work-1password-account-id>
+
+# --- Managed repos ---
+# repos:
+#   - name: my-project
+#     url: git@github.com:you/my-project.git
+#     path: repos/my-project        # relative to overseer_home
+#     git_profile: personal
+#   - name: work-project
+#     url: git@gitlab.yourorg.com:team/project.git
+#     path: repos/work-project
+#     git_profile: work
+#     readonly: true
+
+# --- Obsidian vault (referenced, not owned by brain) ---
+# obsidian:
+#   vault_path: /absolute/path/to/your/vault
+#   vault_name: MyVault              # as registered in the Obsidian app
+#   daily_notes_folder: Daily
+#   templates_folder: Templates
+#   default_folder: Notes
+
+# --- Homebrew ---
+# brew:
+#   brewfile: Brewfile               # default: brain/overseer/Brewfile

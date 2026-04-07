@@ -1,0 +1,8 @@
+# ~/.zshrc — managed by overseer brain
+# Copy to .zshrc (remove the .example suffix) to use.
+
+# Make sure ~/bin is on PATH so the overseer binary is found.
+export PATH="${HOME}/bin:${PATH}"
+
+# Optional: set brain path if it differs from the default (~/brain).
+# export OVERSEER_BRAIN="${HOME}/brain"

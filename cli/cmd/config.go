@@ -31,11 +31,6 @@ func kv(key, value string) string {
 }
 
 func runConfig(_ *cobra.Command, _ []string) error {
-	path, err := config.Path()
-	if err != nil {
-		return err
-	}
-
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -46,7 +41,11 @@ func runConfig(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	fmt.Println(kv("config", fileLink(path)))
+	brainPath := config.ResolveBrainPath(cfg)
+	brainCfgPath := config.BrainOverseerPath(cfg) + "/config.yaml"
+
+	fmt.Println(kv("brain", fileLink(brainPath)))
+	fmt.Println(kv("brain config", fileLink(brainCfgPath)))
 	fmt.Println(kv("config (local)", fileLink(localPath)))
 
 	if len(cfg.Secrets.Environments) > 0 {

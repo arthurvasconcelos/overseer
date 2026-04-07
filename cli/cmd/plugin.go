@@ -30,8 +30,8 @@ type PluginContext struct {
 	Secrets    map[string]map[string]string `json:"secrets"`
 }
 
-// registerPlugins scans PATH for executables named "overseer-*" and registers
-// each as a top-level subcommand that delegates execution to that binary.
+// registerPlugins scans PATH and the brain's plugins/ directory for executables
+// named "overseer-*" and registers each as a top-level subcommand.
 // Built-in commands always take precedence over plugins with the same name.
 func registerPlugins() {
 	seen := map[string]bool{}
@@ -39,7 +39,17 @@ func registerPlugins() {
 		seen[cmd.Name()] = true
 	}
 
-	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+	// Collect scan directories: PATH entries + brain plugins dir.
+	dirs := filepath.SplitList(os.Getenv("PATH"))
+	cfg, err := config.Load()
+	if err == nil {
+		brainPlugins := filepath.Join(config.BrainOverseerPath(cfg), "plugins")
+		if _, err := os.Stat(brainPlugins); err == nil {
+			dirs = append(dirs, brainPlugins)
+		}
+	}
+
+	for _, dir := range dirs {
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			continue

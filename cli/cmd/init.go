@@ -43,8 +43,16 @@ func runInit(_ *cobra.Command, _ []string) error {
 		fmt.Println()
 	}
 
+	brainPath := defaultBrainPath()
 	overseerHome := defaultOverseerHome()
 	gpgSSHProgram := defaultGPGSSHProgram()
+
+	fmt.Println("brain path — directory where your personal config, dotfiles, and Brewfile live")
+	brainPath, err = tui.Prompt("brain_path", brainPath, brainPath)
+	if err != nil {
+		return err
+	}
+	fmt.Println()
 
 	fmt.Println("overseer home — directory where overseer clones managed repos")
 	overseerHome, err = tui.Prompt("overseer_home", overseerHome, overseerHome)
@@ -64,7 +72,7 @@ func runInit(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("creating config dir: %w", err)
 	}
 
-	content := buildLocalConfig(overseerHome, gpgSSHProgram)
+	content := buildLocalConfig(brainPath, overseerHome, gpgSSHProgram)
 	if err := os.WriteFile(localPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("writing config.local.yaml: %w", err)
 	}
@@ -73,9 +81,12 @@ func runInit(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func buildLocalConfig(overseerHome, gpgSSHProgram string) string {
+func buildLocalConfig(brainPath, overseerHome, gpgSSHProgram string) string {
 	var sb strings.Builder
 	sb.WriteString("system:\n")
+	if brainPath != "" {
+		sb.WriteString(fmt.Sprintf("    brain_path: %s\n", brainPath))
+	}
 	if overseerHome != "" {
 		sb.WriteString(fmt.Sprintf("    overseer_home: %s\n", overseerHome))
 	}
@@ -83,6 +94,15 @@ func buildLocalConfig(overseerHome, gpgSSHProgram string) string {
 		sb.WriteString(fmt.Sprintf("    gpg_ssh_program: %s\n", gpgSSHProgram))
 	}
 	return sb.String()
+}
+
+// defaultBrainPath returns the default brain directory path.
+func defaultBrainPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "brain"
+	}
+	return filepath.Join(home, "brain")
 }
 
 // defaultOverseerHome tries to detect a sensible default for overseer_home.

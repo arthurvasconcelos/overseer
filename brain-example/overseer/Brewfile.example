@@ -1,0 +1,15 @@
+# brain/overseer/Brewfile — managed by overseer brain
+# Copy to Brewfile (remove the .example suffix) to use.
+# Run: overseer brew install
+
+# --- Taps ---
+# tap "homebrew/cask"
+
+# --- CLI tools ---
+# brew "git"
+# brew "gh"
+# brew "jq"
+
+# --- Casks ---
+# cask "1password"
+# cask "wezterm"

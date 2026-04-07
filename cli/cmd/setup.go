@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 
+	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/symlink"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
@@ -15,13 +15,12 @@ var dryRun bool
 
 var setupCmd = &cobra.Command{
 	Use:   "setup",
-	Short: "Wire dotfiles into their live locations via symlinks",
-	Long: `Creates symlinks for dotfiles into their live locations.
-Safe to run multiple times — existing correct symlinks are skipped,
-real files are backed up to ~/.overseer-backups/<timestamp>/ first.
+	Short: "Wire dotfiles and install Brew packages from your brain",
+	Long: `Creates symlinks for dotfiles from your brain into their live locations,
+then installs missing Homebrew packages from your brain's Brewfile (macOS only).
 
-The repo root is resolved from $OVERSEER_HOME, or the current directory
-if the env var is not set.`,
+Safe to run multiple times — existing correct symlinks are skipped,
+real files are backed up to ~/.overseer-backups/<timestamp>/ first.`,
 	RunE: runSetup,
 }
 
@@ -31,34 +30,36 @@ func init() {
 }
 
 func runSetup(_ *cobra.Command, _ []string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	return runBrainSetup(cfg, dryRun)
+}
+
+// runBrainSetup wires dotfiles from brain and installs Brew packages.
+// Shared by overseer setup and overseer brain setup.
+func runBrainSetup(cfg *config.Config, dry bool) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
 
-	repoRoot := os.Getenv("OVERSEER_HOME")
-	if repoRoot == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		repoRoot = cwd
-	}
+	brainOverseer := config.BrainOverseerPath(cfg)
 
-	if dryRun {
+	if dry {
 		fmt.Println("overseer setup (dry run)")
 	} else {
 		fmt.Println("overseer setup")
 	}
-	fmt.Printf("  repo: %s\n\n", repoRoot)
+	fmt.Printf("  brain: %s\n\n", config.ResolveBrainPath(cfg))
 
-	links := []struct{ src, dst string }{
-		{filepath.Join(repoRoot, "dotfiles", "shell", ".zshrc"), filepath.Join(home, ".zshrc")},
-	}
-
-	for _, l := range links {
-		if err := symlink.Make(l.src, l.dst, dryRun); err != nil {
-			return fmt.Errorf("symlinking %s: %w", l.dst, err)
+	dotfilesDir := fmt.Sprintf("%s/dotfiles", brainOverseer)
+	if _, err := os.Stat(dotfilesDir); os.IsNotExist(err) {
+		fmt.Println(tui.WarnLine("setup", "dotfiles not found in brain — run: overseer brain init"))
+	} else {
+		if err := symlink.MakeAll(dotfilesDir, home, dry); err != nil {
+			return fmt.Errorf("wiring dotfiles: %w", err)
 		}
 	}
 

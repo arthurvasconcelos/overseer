@@ -107,6 +107,7 @@ type ObsidianConfig struct {
 type SystemConfig struct {
 	GPGSSHProgram string `mapstructure:"gpg_ssh_program"`
 	OverseerHome  string `mapstructure:"overseer_home"`
+	BrainPath     string `mapstructure:"brain_path"`
 }
 
 // GitConfig holds git identity profiles and shared defaults.
@@ -137,6 +138,29 @@ type GitProfile struct {
 	OPAccount     string `mapstructure:"op_account"`    // for op:// references in this profile
 }
 
+// ResolveBrainPath returns the brain directory using this precedence:
+//  1. OVERSEER_BRAIN env var
+//  2. system.brain_path in config.local.yaml
+//  3. ~/brain as default
+func ResolveBrainPath(cfg *Config) string {
+	if b := os.Getenv("OVERSEER_BRAIN"); b != "" {
+		return b
+	}
+	if cfg != nil && cfg.System.BrainPath != "" {
+		return cfg.System.BrainPath
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "brain"
+	}
+	return filepath.Join(home, "brain")
+}
+
+// BrainOverseerPath returns the overseer-specific subdirectory within the brain.
+func BrainOverseerPath(cfg *Config) string {
+	return filepath.Join(ResolveBrainPath(cfg), "overseer")
+}
+
 // Path returns the path to the config file.
 func Path() (string, error) {
 	dir, err := os.UserConfigDir()
@@ -155,38 +179,44 @@ func LocalPath() (string, error) {
 	return filepath.Join(dir, "overseer", "config.local.yaml"), nil
 }
 
-// Load reads config.yaml and merges config.local.yaml on top.
-// If config.yaml does not exist it is created with empty defaults.
+// Load reads config with this merge order (later overrides earlier):
+//  1. brain/overseer/config.yaml  — shared portable config
+//  2. ~/.config/overseer/config.local.yaml — machine-local overrides
+//
+// To resolve the brain path, config.local.yaml is read first in a lightweight
+// pass, then the brain config is loaded as the base.
 // config.local.yaml is optional — missing file is silently ignored.
 func Load() (*Config, error) {
-	path, err := Path()
-	if err != nil {
-		return nil, err
-	}
-
-	v := viper.New()
-	v.SetConfigFile(path)
-
-	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			if !os.IsNotExist(err) {
-				return nil, fmt.Errorf("reading config: %w", err)
-			}
-		}
-		// File doesn't exist yet — write empty file so the path is always valid.
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-			return nil, fmt.Errorf("creating config dir: %w", err)
-		}
-		if err := v.WriteConfigAs(path); err != nil {
-			return nil, fmt.Errorf("writing default config: %w", err)
-		}
-	}
-
-	// Merge machine-local overrides if present.
 	localPath, err := LocalPath()
 	if err != nil {
 		return nil, err
 	}
+
+	// Pass 1: read local config only to resolve brain_path.
+	var localOnly Config
+	if _, err := os.Stat(localPath); err == nil {
+		vl := viper.New()
+		vl.SetConfigFile(localPath)
+		if err := vl.ReadInConfig(); err != nil {
+			return nil, fmt.Errorf("reading config.local.yaml: %w", err)
+		}
+		if err := vl.Unmarshal(&localOnly); err != nil {
+			return nil, fmt.Errorf("parsing config.local.yaml: %w", err)
+		}
+	}
+
+	// Pass 2: load brain config as base, then merge local on top.
+	v := viper.New()
+
+	brainCfgPath := filepath.Join(BrainOverseerPath(&localOnly), "config.yaml")
+	if _, err := os.Stat(brainCfgPath); err == nil {
+		v.SetConfigFile(brainCfgPath)
+		if err := v.ReadInConfig(); err != nil {
+			return nil, fmt.Errorf("reading brain config: %w", err)
+		}
+	}
+
+	// Merge machine-local overrides on top.
 	if _, err := os.Stat(localPath); err == nil {
 		vl := viper.New()
 		vl.SetConfigFile(localPath)
