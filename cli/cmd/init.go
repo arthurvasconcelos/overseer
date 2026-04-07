@@ -21,6 +21,7 @@ var initCmd = &cobra.Command{
 }
 
 func init() {
+	initCmd.Hidden = true
 	rootCmd.AddCommand(initCmd)
 }
 

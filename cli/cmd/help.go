@@ -20,7 +20,7 @@ type cmdGroup struct {
 // rootGroups defines the display order and grouping for root-level commands.
 // Any command not listed here falls through to an "Other" section.
 var rootGroups = []cmdGroup{
-	{"Setup", []string{"init", "brain", "setup", "accounts", "config"}},
+	{"Setup", []string{"setup", "brain", "accounts", "config"}},
 	{"Daily", []string{"daily", "prs", "note", "status"}},
 	{"Dev", []string{"brew", "repos", "git", "run"}},
 	{"System", []string{"update", "completion"}},

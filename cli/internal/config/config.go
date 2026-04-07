@@ -13,12 +13,22 @@ type BrewConfig struct {
 	Brewfile string `mapstructure:"brewfile"` // path relative to overseer_home; defaults to "Brewfile"
 }
 
+// BrainConfig holds settings for the user's brain directory.
+// url and git_profile live here (portable across machines).
+// path is the canonical location; system.brain_path overrides it per machine.
+type BrainConfig struct {
+	Path       string `mapstructure:"path"`        // canonical brain path (e.g. ~/brain)
+	URL        string `mapstructure:"url"`         // git remote URL for pull/clone
+	GitProfile string `mapstructure:"git_profile"` // git profile to use for brain commits
+}
+
 // Config holds all overseer configuration values.
 type Config struct {
 	Secrets      SecretsConfig      `mapstructure:"secrets"`
 	Integrations IntegrationsConfig `mapstructure:"integrations"`
 	Git          GitConfig          `mapstructure:"git"`
 	System       SystemConfig       `mapstructure:"system"`
+	Brain        BrainConfig        `mapstructure:"brain"`
 	Obsidian     ObsidianConfig     `mapstructure:"obsidian"`
 	Brew         BrewConfig         `mapstructure:"brew"`
 	Repos        []RepoConfig       `mapstructure:"repos"`
@@ -140,14 +150,23 @@ type GitProfile struct {
 
 // ResolveBrainPath returns the brain directory using this precedence:
 //  1. OVERSEER_BRAIN env var
-//  2. system.brain_path in config.local.yaml
-//  3. ~/brain as default
+//  2. system.brain_path in config.local.yaml  (machine-local override)
+//  3. brain.path in brain's config.yaml        (portable canonical path)
+//  4. ~/brain as default
 func ResolveBrainPath(cfg *Config) string {
 	if b := os.Getenv("OVERSEER_BRAIN"); b != "" {
 		return b
 	}
 	if cfg != nil && cfg.System.BrainPath != "" {
 		return cfg.System.BrainPath
+	}
+	if cfg != nil && cfg.Brain.Path != "" {
+		home, _ := os.UserHomeDir()
+		p := cfg.Brain.Path
+		if len(p) > 1 && p[:2] == "~/" {
+			p = filepath.Join(home, p[2:])
+		}
+		return p
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {

@@ -55,5 +55,8 @@ func Logo(version string) string {
 	if version != "" && version != "dev" {
 		return box + "  " + StyleMuted.Render(version)
 	}
+	if version == "dev" {
+		return box + "  " + StyleWarn.Render("dev")
+	}
 	return box
 }

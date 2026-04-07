@@ -3,7 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/symlink"
@@ -15,12 +17,11 @@ var dryRun bool
 
 var setupCmd = &cobra.Command{
 	Use:   "setup",
-	Short: "Wire dotfiles and install Brew packages from your brain",
-	Long: `Creates symlinks for dotfiles from your brain into their live locations,
-then installs missing Homebrew packages from your brain's Brewfile (macOS only).
+	Short: "Interactive setup wizard",
+	Long: `Walks through all overseer configuration in one interactive session.
 
-Safe to run multiple times — existing correct symlinks are skipped,
-real files are backed up to ~/.overseer-backups/<timestamp>/ first.`,
+Safe to run multiple times — existing values are shown as defaults,
+dotfile symlinks are idempotent, and files are backed up before being replaced.`,
 	RunE: runSetup,
 }
 
@@ -30,15 +31,203 @@ func init() {
 }
 
 func runSetup(_ *cobra.Command, _ []string) error {
+	fmt.Println(tui.Logo(Version))
+	fmt.Println()
+	if dryRun {
+		fmt.Println(tui.StyleWarn.Render("dry run — no changes will be made"))
+		fmt.Println()
+	}
+
+	// --- Load whatever config exists so we can show current values as defaults.
+	existing, _ := config.Load()
+	if existing == nil {
+		existing = &config.Config{}
+	}
+
+	// -------------------------------------------------------------------------
+	// Section 1: Brain
+	// -------------------------------------------------------------------------
+	fmt.Println(tui.SectionHeader("brain", "where your personal config, dotfiles, and Brewfile live"))
+	fmt.Println()
+
+	currentBrain := config.ResolveBrainPath(existing)
+	brainPath, err := tui.Prompt("brain_path", currentBrain, currentBrain)
+	if err != nil {
+		return err
+	}
+	fmt.Println()
+
+	currentBrainURL := existing.Brain.URL
+	brainURL, err := tui.Prompt("brain remote URL (leave blank to skip)", currentBrainURL, currentBrainURL)
+	if err != nil {
+		return err
+	}
+	fmt.Println()
+
+	// -------------------------------------------------------------------------
+	// Section 2: Machine
+	// -------------------------------------------------------------------------
+	fmt.Println(tui.SectionHeader("machine", "settings specific to this machine"))
+	fmt.Println()
+
+	currentHome := existing.System.OverseerHome
+	if currentHome == "" {
+		currentHome = defaultOverseerHome()
+	}
+	overseerHome, err := tui.Prompt("overseer_home (where managed repos are cloned)", currentHome, currentHome)
+	if err != nil {
+		return err
+	}
+	fmt.Println()
+
+	currentGPG := existing.System.GPGSSHProgram
+	if currentGPG == "" {
+		currentGPG = defaultGPGSSHProgram()
+	}
+	gpgSSHProgram, err := tui.Prompt("gpg_ssh_program (SSH signing binary, leave blank to skip)", currentGPG, currentGPG)
+	if err != nil {
+		return err
+	}
+	fmt.Println()
+
+	// -------------------------------------------------------------------------
+	// Write config.local.yaml
+	// -------------------------------------------------------------------------
+	localPath, err := config.LocalPath()
+	if err != nil {
+		return err
+	}
+
+	if !dryRun {
+		if err := os.MkdirAll(filepath.Dir(localPath), 0755); err != nil {
+			return fmt.Errorf("creating config dir: %w", err)
+		}
+		content := buildLocalConfig(brainPath, overseerHome, gpgSSHProgram)
+		if err := os.WriteFile(localPath, []byte(content), 0644); err != nil {
+			return fmt.Errorf("writing config.local.yaml: %w", err)
+		}
+	}
+	fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("wrote "+localPath))
+	fmt.Println()
+
+	// Reload config now that local is written, so brain paths resolve correctly.
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
-	return runBrainSetup(cfg, dryRun)
+
+	// -------------------------------------------------------------------------
+	// Section 3: Brain scaffold
+	// -------------------------------------------------------------------------
+	fmt.Println(tui.SectionHeader("brain", "scaffold directory structure"))
+	fmt.Println()
+
+	overseerDir := config.BrainOverseerPath(cfg)
+
+	if !dryRun {
+		// Apply brainURL to brain config.yaml if provided.
+		if brainURL != "" && brainURL != existing.Brain.URL {
+			if err := setBrainConfigValue(overseerDir, "url", brainURL); err != nil {
+				fmt.Println(tui.WarnLine("brain", "could not write url to config.yaml: "+err.Error()))
+			}
+		}
+	}
+
+	dirs := []struct{ path, label string }{
+		{filepath.Join(overseerDir, "dotfiles"), "overseer/dotfiles/"},
+		{filepath.Join(overseerDir, "plugins"), "overseer/plugins/"},
+	}
+	for _, d := range dirs {
+		if _, err := os.Stat(d.path); err == nil {
+			fmt.Printf("  %s  %s\n", tui.StyleDim.Render("[skip]"), tui.StyleMuted.Render(d.label+" already exists"))
+			continue
+		}
+		if !dryRun {
+			if err := os.MkdirAll(d.path, 0755); err != nil {
+				return fmt.Errorf("creating %s: %w", d.path, err)
+			}
+		}
+		fmt.Printf("  %s  %s\n", tui.StyleOK.Render("[mkdir]"), tui.StyleNormal.Render(d.label))
+	}
+
+	for _, file := range []struct {
+		path, content, label string
+	}{
+		{
+			filepath.Join(overseerDir, "Brewfile"),
+			"# Add your Homebrew packages here\n",
+			"overseer/Brewfile",
+		},
+		{
+			filepath.Join(overseerDir, "Brewfile.local.example"),
+			"# Machine-specific packages — copy to Brewfile.local (gitignored)\n",
+			"overseer/Brewfile.local.example",
+		},
+		{
+			filepath.Join(overseerDir, "config.yaml"),
+			brainConfigExample,
+			"overseer/config.yaml",
+		},
+	} {
+		if _, err := os.Stat(file.path); err == nil {
+			fmt.Printf("  %s  %s\n", tui.StyleDim.Render("[skip]"), tui.StyleMuted.Render(file.label+" already exists"))
+			continue
+		}
+		if !dryRun {
+			if err := os.WriteFile(file.path, []byte(file.content), 0644); err != nil {
+				return fmt.Errorf("creating %s: %w", file.path, err)
+			}
+		}
+		fmt.Printf("  %s  %s\n", tui.StyleOK.Render("[create]"), tui.StyleNormal.Render(file.label))
+	}
+
+	fmt.Println()
+
+	// -------------------------------------------------------------------------
+	// Section 4: Dotfiles
+	// -------------------------------------------------------------------------
+	fmt.Println(tui.SectionHeader("dotfiles", "wire from brain into ~/"))
+	fmt.Println()
+
+	dotfilesDir := filepath.Join(overseerDir, "dotfiles")
+	if _, err := os.Stat(dotfilesDir); os.IsNotExist(err) {
+		fmt.Printf("  %s\n", tui.StyleMuted.Render("no dotfiles found — add files under "+dotfilesDir+"/"))
+	} else {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		if err := symlink.MakeAll(dotfilesDir, home, dryRun); err != nil {
+			return fmt.Errorf("wiring dotfiles: %w", err)
+		}
+	}
+
+	fmt.Println()
+
+	// -------------------------------------------------------------------------
+	// Section 5: Packages (macOS only)
+	// -------------------------------------------------------------------------
+	if runtime.GOOS == "darwin" && brewAvailable() {
+		fmt.Println(tui.SectionHeader("packages", "install Brewfile packages"))
+		fmt.Println()
+		if err := runBrewInstall(nil, nil); err != nil {
+			fmt.Println(tui.WarnLine("brew", err.Error()))
+		}
+		fmt.Println()
+	}
+
+	// -------------------------------------------------------------------------
+	// Done
+	// -------------------------------------------------------------------------
+	fmt.Println(tui.StyleOK.Render("✓") + "  " + tui.StyleNormal.Render("setup complete"))
+	fmt.Println()
+	fmt.Println(tui.StyleMuted.Render("Next: edit "+filepath.Join(overseerDir, "config.yaml")+" to add integrations and git profiles."))
+
+	return nil
 }
 
 // runBrainSetup wires dotfiles from brain and installs Brew packages.
-// Shared by overseer setup and overseer brain setup.
+// Shared by overseer brain setup.
 func runBrainSetup(cfg *config.Config, dry bool) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -54,16 +243,15 @@ func runBrainSetup(cfg *config.Config, dry bool) error {
 	}
 	fmt.Printf("  brain: %s\n\n", config.ResolveBrainPath(cfg))
 
-	dotfilesDir := fmt.Sprintf("%s/dotfiles", brainOverseer)
+	dotfilesDir := filepath.Join(brainOverseer, "dotfiles")
 	if _, err := os.Stat(dotfilesDir); os.IsNotExist(err) {
-		fmt.Println(tui.WarnLine("setup", "dotfiles not found in brain — run: overseer brain init"))
+		fmt.Println(tui.WarnLine("setup", "dotfiles not found in brain — run: overseer setup"))
 	} else {
 		if err := symlink.MakeAll(dotfilesDir, home, dry); err != nil {
 			return fmt.Errorf("wiring dotfiles: %w", err)
 		}
 	}
 
-	// Brew install — macOS only, skipped on other platforms.
 	if runtime.GOOS == "darwin" && brewAvailable() {
 		fmt.Println()
 		if err := runBrewInstall(nil, nil); err != nil {
@@ -73,4 +261,59 @@ func runBrainSetup(cfg *config.Config, dry bool) error {
 
 	fmt.Println("\nDone.")
 	return nil
+}
+
+// setBrainConfigValue appends or updates a top-level key under `brain:` in
+// the brain's overseer/config.yaml. It reads the raw file and does a simple
+// string manipulation so it never loses existing content or comments.
+func setBrainConfigValue(overseerDir, key, value string) error {
+	cfgPath := filepath.Join(overseerDir, "config.yaml")
+
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		// File doesn't exist yet — nothing to update; caller will create it.
+		return nil
+	}
+
+	lines := strings.Split(string(data), "\n")
+
+	// Find an existing `  key: ...` line inside the brain: block.
+	inBrain := false
+	keyLine := -1
+	brainLine := -1
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "brain:" {
+			inBrain = true
+			brainLine = i
+			continue
+		}
+		if inBrain {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" {
+				continue
+			}
+			// Exited brain block (new top-level key).
+			if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
+				inBrain = false
+				continue
+			}
+			if strings.HasPrefix(trimmed, key+":") {
+				keyLine = i
+			}
+		}
+	}
+
+	entry := fmt.Sprintf("  %s: %s", key, value)
+
+	if keyLine >= 0 {
+		lines[keyLine] = entry
+	} else if brainLine >= 0 {
+		// Insert after the brain: line.
+		lines = append(lines[:brainLine+1], append([]string{entry}, lines[brainLine+1:]...)...)
+	} else {
+		// No brain: block — append one.
+		lines = append(lines, "", "brain:", entry)
+	}
+
+	return os.WriteFile(cfgPath, []byte(strings.Join(lines, "\n")), 0644)
 }

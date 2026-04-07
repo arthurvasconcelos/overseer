@@ -19,10 +19,13 @@ Installs the latest binary to `~/bin/`. Make sure `~/bin` is on your `PATH`.
 ## First-time setup
 
 ```bash
-overseer init            # configure brain_path and machine-local settings
-overseer brain init      # scaffold your brain directory
-overseer brain setup     # wire dotfiles + install Brew packages
+overseer setup
 ```
+
+The interactive wizard walks through everything in one session:
+brain path, git remote, machine settings, directory scaffolding, dotfile wiring, and Brew packages.
+
+Safe to re-run anytime — existing values are shown as defaults and nothing is overwritten without your input.
 
 ---
 
@@ -35,10 +38,10 @@ brain/
   overseer/
     config.yaml          # integrations, git profiles, repos, etc.
     dotfiles/            # mirrors ~/ — symlinked by overseer brain setup
-      shell/
-        .zshrc
-      git/
-        .gitconfig
+      .zshrc             →  ~/.zshrc
+      .gitconfig         →  ~/.gitconfig
+      .config/
+        starship.toml    →  ~/.config/starship.toml
     Brewfile             # your Homebrew packages
     Brewfile.local       # machine-specific packages (gitignored)
     plugins/             # personal overseer-* plugins
@@ -67,9 +70,8 @@ Not everything overseer uses lives in the brain. Some directories are **referenc
 
 | Command | Description |
 |---|---|
-| `overseer init` | Generate `config.local.yaml` interactively |
-| `overseer brain init` | Scaffold the brain directory structure |
-| `overseer brain setup` | Wire dotfiles + install Brew packages |
+| `overseer setup` | Interactive wizard: brain, machine, dotfiles, packages |
+| `overseer brain setup` | Re-apply dotfiles and Brew packages without the wizard |
 | `overseer brain status` | Show brain directory health |
 | `overseer brain path` | Print the resolved brain path |
 | `overseer daily` | Morning briefing (Jira, Slack, Calendar) |
