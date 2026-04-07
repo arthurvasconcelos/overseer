@@ -28,4 +28,5 @@ func Execute() {
 func init() {
 	rootCmd.Version = Version
 	rootCmd.SetVersionTemplate("overseer {{.Version}}\n")
+	registerPlugins()
 }
