@@ -76,6 +76,10 @@ func runPRs(_ *cobra.Command, _ []string) error {
 		})
 	}
 
+	if outputFormat == "json" {
+		return runPRsJSON(ctx, cfg)
+	}
+
 	results := make([]section, len(tasks))
 	var wg sync.WaitGroup
 	for i, t := range tasks {
@@ -99,6 +103,101 @@ func runPRs(_ *cobra.Command, _ []string) error {
 		}
 	}
 	return nil
+}
+
+type prsSectionJSON struct {
+	Source   string `json:"source"`
+	Instance string `json:"instance"`
+	Error    string `json:"error,omitempty"`
+}
+
+type githubSectionJSON struct {
+	prsSectionJSON
+	Items []github.PR `json:"items"`
+}
+
+type gitlabSectionJSON struct {
+	prsSectionJSON
+	Items []gitlab.MR `json:"items"`
+}
+
+func runPRsJSON(ctx context.Context, cfg *config.Config) error {
+	type ghResult struct {
+		inst config.GitHubInstance
+		prs  []github.PR
+		err  error
+	}
+	type glResult struct {
+		inst config.GitLabInstance
+		mrs  []gitlab.MR
+		err  error
+	}
+
+	ghResults := make([]ghResult, len(cfg.Integrations.GitHub))
+	glResults := make([]glResult, len(cfg.Integrations.GitLab))
+
+	var wg sync.WaitGroup
+	for i, inst := range cfg.Integrations.GitHub {
+		i, inst := i, inst
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			token, err := secrets.ReadAs(inst.Token, inst.OPAccount)
+			if err != nil {
+				ghResults[i] = ghResult{inst: inst, err: err}
+				return
+			}
+			prs, err := github.New(token).MyPRs(ctx)
+			ghResults[i] = ghResult{inst: inst, prs: prs, err: err}
+		}()
+	}
+	for i, inst := range cfg.Integrations.GitLab {
+		i, inst := i, inst
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			token, err := secrets.ReadAs(inst.Token, inst.OPAccount)
+			if err != nil {
+				glResults[i] = glResult{inst: inst, err: err}
+				return
+			}
+			mrs, err := gitlab.New(inst.BaseURL, token).MyMRs(ctx)
+			glResults[i] = glResult{inst: inst, mrs: mrs, err: err}
+		}()
+	}
+	wg.Wait()
+
+	var out []any
+	for _, r := range ghResults {
+		s := githubSectionJSON{
+			prsSectionJSON: prsSectionJSON{Source: "github", Instance: r.inst.Name},
+			Items:          r.prs,
+		}
+		if r.err != nil {
+			s.Error = r.err.Error()
+		}
+		if s.Items == nil {
+			s.Items = []github.PR{}
+		}
+		out = append(out, s)
+	}
+	for _, r := range glResults {
+		s := gitlabSectionJSON{
+			prsSectionJSON: prsSectionJSON{Source: "gitlab", Instance: r.inst.Name},
+			Items:          r.mrs,
+		}
+		if r.err != nil {
+			s.Error = r.err.Error()
+		}
+		if s.Items == nil {
+			s.Items = []gitlab.MR{}
+		}
+		out = append(out, s)
+	}
+	if out == nil {
+		out = []any{}
+	}
+	return printJSON(out)
 }
 
 func printGitHubPRs(ctx context.Context, inst config.GitHubInstance, w *bytes.Buffer) error {

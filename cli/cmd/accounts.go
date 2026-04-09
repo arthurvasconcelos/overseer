@@ -49,6 +49,10 @@ func runAccounts(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("parsing accounts: %w", err)
 	}
 
+	if outputFormat == "json" {
+		return printJSON(accounts)
+	}
+
 	header := fmt.Sprintf("  %-30s  %-40s  %s", "ACCOUNT", "EMAIL", "USER ID (use as op_account)")
 	fmt.Println(tui.StyleMuted.Render(header))
 	for _, a := range accounts {

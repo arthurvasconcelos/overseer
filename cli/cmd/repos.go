@@ -78,12 +78,26 @@ type repoResult struct {
 	err      error
 }
 
+type repoStatusJSON struct {
+	Name     string   `json:"name"`
+	Path     string   `json:"path"`
+	Readonly bool     `json:"readonly"`
+	Cloned   bool     `json:"cloned"`
+	Branch   string   `json:"branch,omitempty"`
+	Clean    bool     `json:"clean"`
+	Changes  []string `json:"changes"`
+	Error    string   `json:"error,omitempty"`
+}
+
 func runReposStatus(_ *cobra.Command, _ []string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
 	if len(cfg.Repos) == 0 {
+		if outputFormat == "json" {
+			return printJSON([]repoStatusJSON{})
+		}
 		fmt.Println(tui.StyleMuted.Render("no repos configured — add entries under repos: in config.yaml"))
 		return nil
 	}
@@ -101,6 +115,45 @@ func runReposStatus(_ *cobra.Command, _ []string) error {
 		}()
 	}
 	wg.Wait()
+
+	if outputFormat == "json" {
+		out := make([]repoStatusJSON, len(cfg.Repos))
+		for i, repo := range cfg.Repos {
+			path := repoRoot(home, repo.Path)
+			r := results[i]
+			s := repoStatusJSON{
+				Name:     repo.Name,
+				Path:     path,
+				Readonly: repo.Readonly,
+				Changes:  []string{},
+			}
+			if r.err != nil {
+				s.Error = r.err.Error()
+				out[i] = s
+				continue
+			}
+			raw, err := gitIn(path, "status", "--short", "--branch")
+			if err != nil {
+				s.Error = err.Error()
+				out[i] = s
+				continue
+			}
+			s.Cloned = true
+			for _, line := range strings.Split(strings.TrimSpace(raw), "\n") {
+				if line == "" {
+					continue
+				}
+				if strings.HasPrefix(line, "## ") {
+					s.Branch = strings.TrimPrefix(strings.SplitN(line[3:], "...", 2)[0], "No commits yet on ")
+				} else {
+					s.Changes = append(s.Changes, line)
+				}
+			}
+			s.Clean = len(s.Changes) == 0
+			out[i] = s
+		}
+		return printJSON(out)
+	}
 
 	for _, r := range results {
 		if r.err != nil {

@@ -15,7 +15,14 @@ var configCmd = &cobra.Command{
 	RunE:  runConfig,
 }
 
+var configSchemaCmd = &cobra.Command{
+	Use:   "schema",
+	Short: "Print the JSON Schema for config.yaml",
+	RunE:  runConfigSchema,
+}
+
 func init() {
+	configCmd.AddCommand(configSchemaCmd)
 	rootCmd.AddCommand(configCmd)
 }
 
@@ -34,6 +41,10 @@ func runConfig(_ *cobra.Command, _ []string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
+	}
+
+	if outputFormat == "json" {
+		return printJSON(cfg)
 	}
 
 	localPath, err := config.LocalPath()
@@ -83,5 +94,10 @@ func runConfig(_ *cobra.Command, _ []string) error {
 		}
 	}
 
+	return nil
+}
+
+func runConfigSchema(_ *cobra.Command, _ []string) error {
+	fmt.Println(string(config.SchemaJSON))
 	return nil
 }

@@ -7,6 +7,9 @@ import (
 // Version is injected at build time via -ldflags.
 var Version = "dev"
 
+// outputFormat holds the value of the --format flag ("text" or "json").
+var outputFormat string
+
 var rootCmd = &cobra.Command{
 	Use:   "overseer",
 	Short: "Personal CLI for environment setup and daily automation",
@@ -28,5 +31,6 @@ func Execute() {
 func init() {
 	rootCmd.Version = Version
 	rootCmd.SetVersionTemplate("overseer {{.Version}}\n")
+	rootCmd.PersistentFlags().StringVar(&outputFormat, "format", "text", "Output format: text or json")
 	registerPlugins()
 }

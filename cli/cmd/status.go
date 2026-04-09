@@ -34,6 +34,12 @@ type checkResult struct {
 	msg  string
 }
 
+type checkResultJSON struct {
+	Name    string `json:"name"`
+	OK      bool   `json:"ok"`
+	Message string `json:"message"`
+}
+
 func runStatus(_ *cobra.Command, _ []string) error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -89,6 +95,14 @@ func runStatus(_ *cobra.Command, _ []string) error {
 		}()
 	}
 	wg.Wait()
+
+	if outputFormat == "json" {
+		out := make([]checkResultJSON, len(results))
+		for i, r := range results {
+			out[i] = checkResultJSON{Name: r.name, OK: r.ok, Message: r.msg}
+		}
+		return printJSON(out)
+	}
 
 	// Calculate column width for alignment.
 	maxLen := 0

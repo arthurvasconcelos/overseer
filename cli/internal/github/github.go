@@ -10,11 +10,11 @@ import (
 
 // PR is a minimal representation of a GitHub pull request.
 type PR struct {
-	Number int
-	Title  string
-	Repo   string // "owner/repo"
-	URL    string
-	Draft  bool
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	Repo   string `json:"repo"` // "owner/repo"
+	URL    string `json:"url"`
+	Draft  bool   `json:"draft"`
 }
 
 // Client is a minimal GitHub REST client.

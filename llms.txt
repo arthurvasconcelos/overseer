@@ -1,0 +1,289 @@
+# overseer
+
+> Personal CLI for machine bootstrap, git identity management, and daily automation.
+
+overseer is a single binary that unifies a developer's daily workflows: pulling repos, checking open PRs, reading the morning briefing (Jira, Slack, Calendar), managing git identities, taking notes in Obsidian, and keeping Homebrew packages in sync.
+
+It is designed around a separation between the **tool** (the overseer binary) and the **brain** (a private git repo holding your personal config and scripts). The brain lives at `~/brain` by default and contains `overseer/config.yaml`.
+
+Source: https://github.com/arthurvasconcelos/overseer
+
+---
+
+## Key concepts
+
+### Brain
+The brain is a private git repo that holds your personal configuration. It is separate from the overseer binary so your config can be version-controlled and shared across machines without modifying the tool itself.
+
+- Default location: `~/brain`
+- Config file inside it: `brain/overseer/config.yaml`
+- Override the path per machine via `system.brain_path` in `config.local.yaml` or the `OVERSEER_BRAIN` environment variable.
+
+### Config files (two-layer merge)
+1. `brain/overseer/config.yaml` — shared, portable, committed to the brain repo
+2. `~/.config/overseer/config.local.yaml` — machine-local overrides (tokens, paths), never committed
+
+### 1Password secret references
+Fields that accept secrets use `op://vault/item/field` references resolved at runtime via the `op` CLI. The actual secret is never stored in the config file. Run `overseer accounts` to find your 1Password account IDs.
+
+---
+
+## Installation
+
+```bash
+# macOS (Homebrew)
+brew install arthurvasconcelos/tap/overseer
+
+# Or download a release binary from GitHub Releases
+```
+
+First-time setup:
+```bash
+overseer setup       # symlinks dotfiles, clones repos
+overseer brain setup # clones the brain repo (if remote configured)
+overseer init        # creates ~/.config/overseer/config.local.yaml interactively
+```
+
+---
+
+## Commands
+
+### overseer setup
+Bootstraps the machine: runs `overseer repos pull`, `overseer brew install`, and `overseer git setup`.
+
+Flags:
+- `--dry-run` — show what would happen without making changes
+
+### overseer brain
+Manages the brain directory.
+
+Subcommands:
+- `overseer brain init` — clone the brain repo from brain.url
+- `overseer brain setup` — pull latest brain changes and re-apply config
+- `overseer brain status` — show brain git status and health
+- `overseer brain pull` — git pull the brain repo
+- `overseer brain push` — git push the brain repo
+- `overseer brain git-init` — initialise a new git repo in the brain directory
+- `overseer brain path` — print the resolved brain path
+
+### overseer accounts
+Lists all 1Password accounts signed into the `op` CLI. Shows the USER ID needed for `op_account` fields in config.
+
+```bash
+overseer accounts
+overseer accounts --format json
+```
+
+JSON output: `[{"url": "...", "email": "...", "user_uuid": "..."}]`
+
+### overseer config
+Shows the active merged configuration (brain config + local overrides).
+
+```bash
+overseer config
+overseer config --format json   # full config as JSON
+overseer config schema          # print the JSON Schema for config.yaml
+```
+
+### overseer daily
+Morning briefing: fetches and displays today's Jira tickets, Slack mentions, Google Calendar events, and open PRs in parallel.
+
+```bash
+overseer daily
+```
+
+### overseer prs
+Lists open pull requests (GitHub) and merge requests (GitLab) across all configured instances.
+
+```bash
+overseer prs
+overseer prs --format json
+```
+
+JSON output:
+```json
+[
+  {
+    "source": "github",
+    "instance": "personal",
+    "items": [
+      {"number": 42, "title": "...", "repo": "owner/repo", "url": "...", "draft": false}
+    ]
+  },
+  {
+    "source": "gitlab",
+    "instance": "work",
+    "items": [
+      {"iid": 5, "title": "...", "project": "ns/proj", "url": "...", "draft": false, "status": "can_be_merged"}
+    ]
+  }
+]
+```
+
+### overseer note
+Obsidian vault integration.
+
+Subcommands:
+- `overseer note daily` — open or create today's daily note in Obsidian
+- `overseer note new [title]` — create a new note with folder and template picker
+- `overseer note search <query>` — search all vault markdown files
+
+```bash
+overseer note search "kubernetes" --format json
+```
+
+JSON output: `[{"file": "path/in/vault.md", "line_num": 12, "line": "matching line"}]`
+
+### overseer status
+Health-checks all configured integrations (1Password, Jira, Slack, Google).
+
+```bash
+overseer status
+overseer status --format json
+```
+
+JSON output: `[{"name": "jira/work", "ok": true, "message": "user@example.com"}]`
+
+### overseer repos
+Manages git repositories defined in the `repos` config section.
+
+Subcommands:
+- `overseer repos status` — git status across all managed repos
+- `overseer repos pull` — pull (or clone if missing) all managed repos
+- `overseer repos setup` — apply git profiles to already-cloned repos
+
+```bash
+overseer repos status --format json
+```
+
+JSON output:
+```json
+[
+  {
+    "name": "brain",
+    "path": "/Users/you/brain",
+    "readonly": false,
+    "cloned": true,
+    "branch": "main",
+    "clean": true,
+    "changes": []
+  }
+]
+```
+
+### overseer git
+Git identity management.
+
+Subcommands:
+- `overseer git setup` — interactive profile picker, applies identity to current repo or globally
+- `overseer git profile list` — list all configured git profiles
+- `overseer git profile add` — create a new profile
+- `overseer git profile edit [name]` — edit an existing profile
+- `overseer git profile remove [name]` — remove a profile
+- `overseer git profile apply [name]` — apply a profile to the current repo or globally (`--global`)
+- `overseer git profile defaults` — view and edit shared git defaults
+
+```bash
+overseer git profile list --format json
+```
+
+JSON output: array of profile objects with fields: `name`, `email`, `signing_key`, `user_name`, `gpg_format`, `gpg_ssh_program`, `commit_gpgsign`, `op_account`.
+
+### overseer brew
+Homebrew integration using a Brewfile in the repos directory.
+
+Subcommands:
+- `overseer brew check` — show packages not yet installed
+- `overseer brew install` — run `brew bundle`
+- `overseer brew dump` — update the Brewfile from installed packages
+
+### overseer run
+Run a script from the brain's `scripts/` directory.
+
+```bash
+overseer run <script-name> [args...]
+```
+
+### overseer update
+Check for and apply a new overseer release.
+
+```bash
+overseer update
+```
+
+### overseer init
+Interactive wizard that creates `~/.config/overseer/config.local.yaml`.
+
+### overseer completion
+Generate shell completion scripts.
+
+```bash
+# Zsh
+source <(overseer completion zsh)
+# or add to ~/.zshrc:
+echo 'source <(overseer completion zsh)' >> ~/.zshrc
+
+# Bash
+echo 'source <(overseer completion bash)' >> ~/.bashrc
+
+# Fish
+overseer completion fish > ~/.config/fish/completions/overseer.fish
+```
+
+---
+
+## Global flags
+
+- `--format text|json` — output format for all commands that produce structured data (default: `text`)
+- `--version` — print overseer version
+- `--help` — print help
+
+---
+
+## Config reference
+
+Full JSON Schema available via:
+```bash
+overseer config schema
+```
+
+Top-level config keys:
+
+| Key | Description |
+|-----|-------------|
+| `secrets.environments` | Map of alias → 1Password account ID |
+| `integrations.jira[]` | Jira instances (name, base_url, email, token, op_account) |
+| `integrations.slack[]` | Slack workspaces (name, token, op_account) |
+| `integrations.google[]` | Google accounts (name, credentials_doc, op_account) |
+| `integrations.github[]` | GitHub accounts (name, token, op_account) |
+| `integrations.gitlab[]` | GitLab instances (name, base_url, token, op_account) |
+| `git.defaults` | Shared git settings (user_name, gpg_format, gpg_ssh_program, commit_gpgsign) |
+| `git.profiles[]` | Named git identities (name, email, signing_key, ...) |
+| `system.repos_path` | Where managed repos are cloned (machine-local) |
+| `system.brain_path` | Brain directory override (machine-local) |
+| `brain.path` | Canonical brain path (portable, e.g. ~/brain) |
+| `brain.url` | Brain git remote URL |
+| `brain.git_profile` | Git profile to use for brain commits |
+| `obsidian.vault_path` | Path to the Obsidian vault |
+| `obsidian.vault_name` | Vault name as registered in Obsidian |
+| `obsidian.daily_notes_folder` | Folder for daily notes |
+| `obsidian.templates_folder` | Folder for note templates |
+| `brew.brewfile` | Brewfile path relative to repos_path |
+| `repos[]` | Managed repos (name, url, path, readonly, git_profile) |
+
+---
+
+## Plugin system
+
+overseer supports external plugins: any binary named `overseer-<name>` on PATH or in `brain/plugins/` is automatically registered as a subcommand `overseer <name>`.
+
+Plugin SDKs are available for Python (`sdk/python/`) and TypeScript (`sdk/typescript/`) in the overseer repository.
+
+---
+
+## Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `OVERSEER_BRAIN` | Override brain directory path |
+| `OVERSEER_REPOS_PATH` | Override repos root directory |

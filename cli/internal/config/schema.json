@@ -1,0 +1,352 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/arthurvasconcelos/overseer/main/cli/internal/config/schema.json",
+  "title": "Overseer Config",
+  "description": "Configuration for overseer — a personal CLI for machine bootstrap and daily automation. Two files are merged: brain/overseer/config.yaml (shared, portable) and ~/.config/overseer/config.local.yaml (machine-local overrides). Secret fields accept op:// references resolved at runtime via the 1Password CLI.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "secrets": {
+      "description": "1Password environment mappings. Maps a short alias to a 1Password account ID, used in secrets.RunWithEnv calls.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "environments": {
+          "description": "Map of alias → 1Password account ID (e.g. { \"work\": \"YUJYMY4HLFBKNHT4GO5URMOKIY\" }). Run: overseer accounts to find your IDs.",
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "integrations": {
+      "description": "Third-party integration configurations. Each integration supports multiple named instances.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "jira": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/jiraInstance" }
+        },
+        "slack": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/slackWorkspace" }
+        },
+        "google": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/googleAccount" }
+        },
+        "github": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/githubInstance" }
+        },
+        "gitlab": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/gitlabInstance" }
+        }
+      }
+    },
+    "git": {
+      "description": "Git identity profiles and shared defaults. Profiles inherit from defaults; any field can be overridden per profile.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "defaults": { "$ref": "#/$defs/gitDefaults" },
+        "profiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/gitProfile" }
+        }
+      }
+    },
+    "system": {
+      "description": "Machine-specific overrides. Lives in config.local.yaml, never committed to the brain repo.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gpg_ssh_program": {
+          "description": "Path to the SSH program used for GPG signing (e.g. /usr/local/bin/op-ssh-sign).",
+          "type": "string"
+        },
+        "repos_path": {
+          "description": "Absolute path to the directory where managed repositories are cloned.",
+          "type": "string"
+        },
+        "brain_path": {
+          "description": "Absolute path to the brain directory. Overrides brain.path for this machine.",
+          "type": "string"
+        }
+      }
+    },
+    "brain": {
+      "description": "Brain directory settings. The brain is a private git repo holding your personal overseer config and scripts.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "description": "Canonical brain path, may use ~ (e.g. ~/brain). Overridden per machine by system.brain_path.",
+          "type": "string"
+        },
+        "url": {
+          "description": "Git remote URL for pulling/cloning the brain repo.",
+          "type": "string"
+        },
+        "git_profile": {
+          "description": "Name of the git profile (from git.profiles) to use for brain commits.",
+          "type": "string"
+        }
+      }
+    },
+    "obsidian": {
+      "description": "Obsidian vault integration settings.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "vault_path": {
+          "description": "Path to the Obsidian vault. Relative paths are resolved from system.repos_path.",
+          "type": "string"
+        },
+        "vault_name": {
+          "description": "Vault name as registered in the Obsidian app (used for obsidian:// URI scheme). Defaults to the directory basename.",
+          "type": "string"
+        },
+        "daily_notes_folder": {
+          "description": "Folder inside the vault for daily notes (e.g. \"06 - Daily\").",
+          "type": "string"
+        },
+        "templates_folder": {
+          "description": "Folder inside the vault for note templates (e.g. \"99 - Meta/_templates\").",
+          "type": "string"
+        },
+        "default_folder": {
+          "description": "Default destination folder when creating new notes. Empty string means vault root.",
+          "type": "string"
+        }
+      }
+    },
+    "brew": {
+      "description": "Homebrew integration settings.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "brewfile": {
+          "description": "Path to the Brewfile, relative to system.repos_path. Defaults to \"Brewfile\".",
+          "type": "string"
+        }
+      }
+    },
+    "repos": {
+      "description": "List of git repositories managed by overseer. Used by: overseer repos status/pull.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/repoConfig" }
+    }
+  },
+  "$defs": {
+    "opRef": {
+      "description": "A 1Password secret reference (op://vault/item/field) or a plain string value.",
+      "type": "string",
+      "pattern": "^op://.+"
+    },
+    "jiraInstance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "base_url", "email", "token"],
+      "properties": {
+        "name": {
+          "description": "Short identifier for this Jira instance (e.g. \"work\").",
+          "type": "string"
+        },
+        "base_url": {
+          "description": "Jira instance base URL (e.g. \"https://mycompany.atlassian.net\").",
+          "type": "string",
+          "format": "uri"
+        },
+        "email": {
+          "description": "Jira account email. Accepts an op:// reference.",
+          "type": "string"
+        },
+        "token": {
+          "description": "Jira API token. Accepts an op:// reference.",
+          "type": "string"
+        },
+        "op_account": {
+          "description": "1Password account ID to use when resolving op:// references. Run: overseer accounts to find your IDs.",
+          "type": "string"
+        }
+      }
+    },
+    "slackWorkspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "token"],
+      "properties": {
+        "name": {
+          "description": "Short identifier for this Slack workspace (e.g. \"work\").",
+          "type": "string"
+        },
+        "token": {
+          "description": "Slack bot OAuth token. Accepts an op:// reference.",
+          "type": "string"
+        },
+        "op_account": {
+          "description": "1Password account ID to use when resolving op:// references.",
+          "type": "string"
+        }
+      }
+    },
+    "googleAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "credentials_doc"],
+      "properties": {
+        "name": {
+          "description": "Short identifier for this Google account (e.g. \"personal\").",
+          "type": "string"
+        },
+        "credentials_doc": {
+          "description": "op:// reference to a 1Password Document containing the OAuth2 credentials JSON from Google Cloud Console.",
+          "type": "string"
+        },
+        "op_account": {
+          "description": "1Password account ID to use when resolving op:// references.",
+          "type": "string"
+        }
+      }
+    },
+    "githubInstance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "token"],
+      "properties": {
+        "name": {
+          "description": "Short identifier for this GitHub account (e.g. \"personal\").",
+          "type": "string"
+        },
+        "token": {
+          "description": "GitHub Personal Access Token. Accepts an op:// reference.",
+          "type": "string"
+        },
+        "op_account": {
+          "description": "1Password account ID to use when resolving op:// references.",
+          "type": "string"
+        }
+      }
+    },
+    "gitlabInstance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "token"],
+      "properties": {
+        "name": {
+          "description": "Short identifier for this GitLab instance (e.g. \"work\").",
+          "type": "string"
+        },
+        "base_url": {
+          "description": "GitLab instance base URL. Defaults to https://gitlab.com.",
+          "type": "string",
+          "format": "uri"
+        },
+        "token": {
+          "description": "GitLab Personal Access Token. Accepts an op:// reference.",
+          "type": "string"
+        },
+        "op_account": {
+          "description": "1Password account ID to use when resolving op:// references.",
+          "type": "string"
+        }
+      }
+    },
+    "gitDefaults": {
+      "description": "Shared git identity settings inherited by all profiles. Any field can be overridden per profile.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "user_name": {
+          "description": "Default git user.name across all profiles.",
+          "type": "string"
+        },
+        "gpg_format": {
+          "description": "Default GPG format: \"ssh\" or \"openpgp\".",
+          "type": "string",
+          "enum": ["ssh", "openpgp"]
+        },
+        "gpg_ssh_program": {
+          "description": "Path to the SSH signing helper (e.g. /usr/local/bin/op-ssh-sign). Overrides system.gpg_ssh_program.",
+          "type": "string"
+        },
+        "commit_gpgsign": {
+          "description": "Whether to sign commits by default.",
+          "type": "boolean"
+        }
+      }
+    },
+    "gitProfile": {
+      "description": "A named git identity. Fields left empty inherit from git.defaults.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "description": "Unique profile name used to reference this profile in repos and brain config.",
+          "type": "string"
+        },
+        "email": {
+          "description": "git user.email for this identity.",
+          "type": "string",
+          "format": "email"
+        },
+        "signing_key": {
+          "description": "SSH public key or GPG key ID for commit signing. Accepts an op:// reference.",
+          "type": "string"
+        },
+        "user_name": {
+          "description": "git user.name override. Leave empty to inherit from git.defaults.user_name.",
+          "type": "string"
+        },
+        "gpg_format": {
+          "description": "GPG format override for this profile: \"ssh\" or \"openpgp\".",
+          "type": "string",
+          "enum": ["ssh", "openpgp"]
+        },
+        "gpg_ssh_program": {
+          "description": "SSH signing helper path override for this profile.",
+          "type": "string"
+        },
+        "commit_gpgsign": {
+          "description": "Override git.defaults.commit_gpgsign for this profile.",
+          "type": "boolean"
+        },
+        "op_account": {
+          "description": "1Password account ID used to resolve op:// references in this profile.",
+          "type": "string"
+        }
+      }
+    },
+    "repoConfig": {
+      "description": "A git repository managed by overseer.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "url", "path"],
+      "properties": {
+        "name": {
+          "description": "Display name for this repo.",
+          "type": "string"
+        },
+        "url": {
+          "description": "Git remote URL used for cloning.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Clone destination, relative to system.repos_path (or absolute).",
+          "type": "string"
+        },
+        "readonly": {
+          "description": "When true, overseer skips push and warns on local changes.",
+          "type": "boolean"
+        },
+        "git_profile": {
+          "description": "Profile name from git.profiles to apply after cloning.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

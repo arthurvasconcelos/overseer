@@ -76,6 +76,14 @@ func runProfileList(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
+	if outputFormat == "json" {
+		profiles := cfg.Git.Profiles
+		if profiles == nil {
+			profiles = []config.GitProfile{}
+		}
+		return printJSON(profiles)
+	}
+
 	if len(cfg.Git.Profiles) == 0 {
 		fmt.Println(tui.StyleMuted.Render("no git profiles configured"))
 		fmt.Println(tui.StyleMuted.Render("run: overseer git profile add"))

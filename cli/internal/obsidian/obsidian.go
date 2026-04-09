@@ -49,9 +49,9 @@ func (v *Vault) Open(relPath string) error {
 
 // SearchResult is a single matching line from Search.
 type SearchResult struct {
-	File    string // path relative to vault root
-	LineNum int
-	Line    string
+	File    string `json:"file"`     // path relative to vault root
+	LineNum int    `json:"line_num"`
+	Line    string `json:"line"`
 }
 
 // Search returns all lines in .md files (excluding .obsidian/) matching

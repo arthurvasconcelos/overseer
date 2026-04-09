@@ -247,6 +247,13 @@ func runNoteSearch(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("search: %w", err)
 	}
 
+	if outputFormat == "json" {
+		if results == nil {
+			results = []obsidianpkg.SearchResult{}
+		}
+		return printJSON(results)
+	}
+
 	if len(results) == 0 {
 		fmt.Println(tui.StyleMuted.Render("no results for: " + query))
 		return nil

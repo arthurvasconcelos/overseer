@@ -13,12 +13,12 @@ const defaultBaseURL = "https://gitlab.com"
 
 // MR is a minimal representation of a GitLab merge request.
 type MR struct {
-	IID        int    // merge request IID within the project
-	Title      string
-	Project    string // "namespace/project"
-	URL        string
-	Draft      bool
-	Status     string // "can_be_merged", "cannot_be_merged", "checking", ""
+	IID     int    `json:"iid"`     // merge request IID within the project
+	Title   string `json:"title"`
+	Project string `json:"project"` // "namespace/project"
+	URL     string `json:"url"`
+	Draft   bool   `json:"draft"`
+	Status  string `json:"status"` // "can_be_merged", "cannot_be_merged", "checking", ""
 }
 
 // Client is a minimal GitLab REST client.
