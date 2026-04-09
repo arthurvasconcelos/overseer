@@ -5,6 +5,7 @@ project_name: overseer
 before:
   hooks:
     - go -C cli mod tidy
+    - go -C cli run . generate-docs ../man
 
 builds:
   - id: overseer
@@ -26,12 +27,12 @@ archives:
       - tar.gz
     name_template: "overseer_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
-      - none*
+      - man/*.1
 
 checksum:
   name_template: "overseer_{{ .Version }}_checksums.txt"
 
-brews:
+homebrew_casks:
   - name: overseer
     repository:
       owner: arthurvasconcelos
@@ -40,14 +41,16 @@ brews:
     directory: Formula
     homepage: "https://github.com/arthurvasconcelos/overseer"
     description: "Personal CLI for environment setup and daily automation"
-    license: "MIT"
-    install: |
-      bin.install "overseer"
-      system bin/"overseer", "generate-docs", "#{buildpath}/man"
-      man1.install Dir["#{buildpath}/man/*.1"]
-      generate_completions_from_executable(bin/"overseer", "completion")
-    test: |
-      assert_match version.to_s, shell_output("#{bin}/overseer --version")
+    binaries:
+      - overseer
+    manpages:
+      - man/*.1
+    generate_completions_from_executable:
+      shell_parameter_format: cobra
+      shells:
+        - bash
+        - zsh
+        - fish
 
 release:
   github:
