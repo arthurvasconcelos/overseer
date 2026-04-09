@@ -47,8 +47,8 @@ func init() {
 
 func brewfilePath(cfg *config.Config) string {
 	if cfg.Brew.Brewfile != "" {
-		// Explicit override in config — resolve relative to overseer_home.
-		return repoRoot(resolveOverseerHome(cfg), cfg.Brew.Brewfile)
+		// Explicit override in config — resolve relative to repos_path.
+		return repoRoot(resolveReposPath(cfg), cfg.Brew.Brewfile)
 	}
 	return fmt.Sprintf("%s/Brewfile", config.BrainOverseerPath(cfg))
 }
@@ -207,11 +207,8 @@ func runBrewDump(_ *cobra.Command, _ []string) error {
 
 	fmt.Printf("this will overwrite %s with all currently installed packages\n\n", tui.StyleAccent.Render(path))
 
-	idx, err := tui.Select("continue?", []tui.SelectItem{
-		{Title: "yes", Subtitle: "overwrite Brewfile"},
-		{Title: "no", Subtitle: "cancel"},
-	})
-	if err != nil || idx != 0 {
+	confirmed, err := tui.Confirm("continue?")
+	if err != nil || !confirmed {
 		fmt.Println(tui.StyleMuted.Render("cancelled"))
 		return nil
 	}

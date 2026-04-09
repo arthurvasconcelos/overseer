@@ -52,16 +52,16 @@ func repoRoot(overseerHome, repoPath string) string {
 	return filepath.Join(overseerHome, repoPath)
 }
 
-// resolveOverseerHome returns the overseer repo root using this precedence:
-// 1. OVERSEER_HOME env var
-// 2. system.overseer_home in config.local.yaml
+// resolveReposPath returns the overseer repo root using this precedence:
+// 1. OVERSEER_REPOS_PATH env var
+// 2. system.repos_path in config.local.yaml
 // 3. parent of the directory containing the binary (best-effort)
-func resolveOverseerHome(cfg *config.Config) string {
-	if h := os.Getenv("OVERSEER_HOME"); h != "" {
+func resolveReposPath(cfg *config.Config) string {
+	if h := os.Getenv("OVERSEER_REPOS_PATH"); h != "" {
 		return h
 	}
-	if cfg.System.OverseerHome != "" {
-		return cfg.System.OverseerHome
+	if cfg.System.ReposPath != "" {
+		return cfg.System.ReposPath
 	}
 	exe, err := os.Executable()
 	if err != nil {
@@ -88,7 +88,7 @@ func runReposStatus(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	home := resolveOverseerHome(cfg)
+	home := resolveReposPath(cfg)
 	results := make([]repoResult, len(cfg.Repos))
 	var wg sync.WaitGroup
 
@@ -123,7 +123,7 @@ func runReposPull(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	home := resolveOverseerHome(cfg)
+	home := resolveReposPath(cfg)
 	results := make([]repoResult, len(cfg.Repos))
 	var wg sync.WaitGroup
 
@@ -158,7 +158,7 @@ func runReposSetup(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	home := resolveOverseerHome(cfg)
+	home := resolveReposPath(cfg)
 	for _, repo := range cfg.Repos {
 		if repo.GitProfile == "" {
 			continue

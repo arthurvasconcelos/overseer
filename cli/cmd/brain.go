@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
@@ -56,6 +57,35 @@ var brainPullCmd = &cobra.Command{
 
 var brainDryRun bool
 
+var brainPushCmd = &cobra.Command{
+	Use:   "push",
+	Short: "Stage, commit, and push all brain changes",
+	Long: `Stages all changes in the brain directory, commits with an auto-generated
+message, and pushes to the remote.
+
+Commit message format:
+  <n> brain files from <hostname> on <date>
+  Affected files:
+  <list>`,
+	RunE: runBrainPush,
+}
+
+var brainGitInitCmd = &cobra.Command{
+	Use:   "git-init",
+	Short: "Initialize the brain directory as a git repository",
+	Long: `Sets up the brain directory as a git repository.
+
+If the brain is already a git repository, this command exits safely with no changes.
+
+Steps:
+  1. git init
+  2. git remote add origin <url>  (from brain.url in config, or prompted)
+  3. Apply brain.git_profile      (if configured)
+  4. Initial commit               (if files exist)
+  5. git push -u origin <branch>  (if remote is set)`,
+	RunE: runBrainGitInit,
+}
+
 func init() {
 	brainSetupCmd.Flags().BoolVar(&brainDryRun, "dry-run", false, "Preview changes without making them")
 	brainInitCmd.Hidden = true
@@ -63,6 +93,8 @@ func init() {
 	brainCmd.AddCommand(brainSetupCmd)
 	brainCmd.AddCommand(brainStatusCmd)
 	brainCmd.AddCommand(brainPullCmd)
+	brainCmd.AddCommand(brainPushCmd)
+	brainCmd.AddCommand(brainGitInitCmd)
 	brainCmd.AddCommand(brainPathCmd)
 	rootCmd.AddCommand(brainCmd)
 }
@@ -198,7 +230,7 @@ func runBrainStatus(_ *cobra.Command, _ []string) error {
 		}
 	} else {
 		fmt.Printf("  %s  %s\n", tui.StyleWarn.Render("⚠"), tui.StyleNormal.Render("not a git repository — changes are not versioned"))
-		fmt.Printf("     %s\n", tui.StyleMuted.Render("run: cd "+brainPath+" && git init && git remote add origin <url>"))
+		fmt.Printf("     %s\n", tui.StyleMuted.Render("run: overseer brain git-init"))
 	}
 
 	// Dotfile wiring count.
@@ -271,7 +303,7 @@ func runBrainPull(_ *cobra.Command, _ []string) error {
 
 	if !brainIsGit(brainPath) {
 		fmt.Printf("%s  brain at %s is not a git repository\n", tui.StyleWarn.Render("⚠"), brainPath)
-		fmt.Printf("   %s\n", tui.StyleMuted.Render("run: cd "+brainPath+" && git init && git remote add origin <url>"))
+		fmt.Printf("   %s\n", tui.StyleMuted.Render("run: overseer brain git-init"))
 		return nil
 	}
 
@@ -288,6 +320,234 @@ func runBrainPull(_ *cobra.Command, _ []string) error {
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git pull failed: %w", err)
+	}
+
+	return nil
+}
+
+// --- brain git-init ---
+
+func runBrainGitInit(_ *cobra.Command, _ []string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	brainPath := config.ResolveBrainPath(cfg)
+
+	if brainIsGit(brainPath) {
+		fmt.Printf("%s  brain at %s is already a git repository\n", tui.StyleOK.Render("✓"), brainPath)
+		return nil
+	}
+
+	fmt.Println(tui.SectionHeader("brain git-init", brainPath))
+	fmt.Println()
+
+	if err := initBrainRepo(cfg, cfg.Brain.URL); err != nil {
+		return err
+	}
+
+	fmt.Println()
+	fmt.Printf("%s  brain is now a git repository\n", tui.StyleOK.Render("✓"))
+	return nil
+}
+
+// initBrainRepo initializes the brain directory as a new git repository,
+// sets the remote, applies the git profile, makes an initial commit, and pushes.
+// remoteURL may be empty — if so, the user is prompted.
+func initBrainRepo(cfg *config.Config, remoteURL string) error {
+	brainPath := config.ResolveBrainPath(cfg)
+
+	if remoteURL == "" {
+		var err error
+		remoteURL, err = tui.Prompt("remote URL (leave blank to skip)", "", "")
+		if err != nil {
+			return err
+		}
+		fmt.Println()
+	}
+
+	if out, err := gitIn(brainPath, "init"); err != nil {
+		return fmt.Errorf("git init: %s", strings.TrimSpace(out))
+	}
+	fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("initialized git repository"))
+
+	if remoteURL != "" {
+		if out, err := gitIn(brainPath, "remote", "add", "origin", remoteURL); err != nil {
+			return fmt.Errorf("git remote add: %s", strings.TrimSpace(out))
+		}
+		fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("remote set to "+remoteURL))
+	}
+
+	applyBrainGitProfile(brainPath, cfg)
+
+	porcelain := brainGitOutput(brainPath, "status", "--porcelain")
+	if porcelain != "" {
+		hostname, _ := os.Hostname()
+		date := time.Now().Format("Mon, 02 Jan 2006 15:04")
+		msg := fmt.Sprintf("initial brain commit from %s on %s", hostname, date)
+
+		if out, err := gitIn(brainPath, "add", "-A"); err != nil {
+			return fmt.Errorf("git add: %s", strings.TrimSpace(out))
+		}
+		if out, err := gitIn(brainPath, "commit", "-m", msg); err != nil {
+			return fmt.Errorf("git commit: %s", strings.TrimSpace(out))
+		}
+		fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("created initial commit"))
+	}
+
+	if remoteURL != "" {
+		branch := brainGitOutput(brainPath, "rev-parse", "--abbrev-ref", "HEAD")
+		if branch == "" {
+			branch = "main"
+		}
+		cmd := exec.Command("git", "-C", brainPath, "push", "-u", "origin", branch)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("git push failed: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// cloneExistingBrain wires the brain directory to an existing remote repository
+// by fetching and resetting to match origin. Any scaffolded files are replaced
+// by the remote content.
+func cloneExistingBrain(cfg *config.Config, remoteURL string) error {
+	brainPath := config.ResolveBrainPath(cfg)
+
+	if remoteURL == "" {
+		var err error
+		remoteURL, err = tui.Prompt("remote URL", "", "")
+		if err != nil || remoteURL == "" {
+			return fmt.Errorf("remote URL is required to clone an existing brain")
+		}
+		fmt.Println()
+	}
+
+	if out, err := gitIn(brainPath, "init"); err != nil {
+		return fmt.Errorf("git init: %s", strings.TrimSpace(out))
+	}
+	if out, err := gitIn(brainPath, "remote", "add", "origin", remoteURL); err != nil {
+		return fmt.Errorf("git remote add: %s", strings.TrimSpace(out))
+	}
+
+	fmt.Printf("  %s  %s\n", tui.StyleNormal.Render("↓"), tui.StyleNormal.Render("fetching from "+remoteURL))
+	fetchCmd := exec.Command("git", "-C", brainPath, "fetch", "origin")
+	fetchCmd.Stdout = os.Stdout
+	fetchCmd.Stderr = os.Stderr
+	if err := fetchCmd.Run(); err != nil {
+		return fmt.Errorf("git fetch failed: %w", err)
+	}
+
+	// Detect the default remote branch.
+	branch := brainGitOutput(brainPath, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+	branch = strings.TrimPrefix(branch, "origin/")
+	if branch == "" {
+		branch = "main"
+	}
+
+	if out, err := gitIn(brainPath, "reset", "--hard", "origin/"+branch); err != nil {
+		return fmt.Errorf("git reset: %s", strings.TrimSpace(out))
+	}
+	if out, err := gitIn(brainPath, "checkout", "-B", branch, "origin/"+branch); err != nil {
+		return fmt.Errorf("git checkout: %s", strings.TrimSpace(out))
+	}
+
+	applyBrainGitProfile(brainPath, cfg)
+
+	fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("cloned brain from "+remoteURL))
+	return nil
+}
+
+// applyBrainGitProfile applies brain.git_profile to the brain repo if configured.
+func applyBrainGitProfile(brainPath string, cfg *config.Config) {
+	if cfg.Brain.GitProfile == "" {
+		return
+	}
+	for i := range cfg.Git.Profiles {
+		if cfg.Git.Profiles[i].Name == cfg.Brain.GitProfile {
+			resolved, err := resolveProfile(cfg.Git.Profiles[i], cfg.Git.Defaults, cfg.System)
+			if err != nil {
+				fmt.Printf("  %s  resolving git profile %q: %v\n", tui.StyleWarn.Render("⚠"), cfg.Brain.GitProfile, err)
+			} else if err := applyGitConfigIn(brainPath, gitScopeLocal, resolved); err != nil {
+				fmt.Printf("  %s  applying git profile %q: %v\n", tui.StyleWarn.Render("⚠"), cfg.Brain.GitProfile, err)
+			} else {
+				fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("applied git profile "+cfg.Brain.GitProfile))
+			}
+			return
+		}
+	}
+}
+
+// --- brain push ---
+
+func runBrainPush(_ *cobra.Command, _ []string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	brainPath := config.ResolveBrainPath(cfg)
+
+	if !brainIsGit(brainPath) {
+		fmt.Printf("%s  brain at %s is not a git repository\n", tui.StyleWarn.Render("⚠"), brainPath)
+		fmt.Printf("   %s\n", tui.StyleMuted.Render("run: overseer brain git-init"))
+		return nil
+	}
+
+	porcelain := brainGitOutput(brainPath, "status", "--porcelain")
+	if porcelain == "" {
+		fmt.Printf("%s  nothing to commit, brain is clean\n", tui.StyleOK.Render("✓"))
+		return nil
+	}
+
+	// Parse affected file names from porcelain output.
+	lines := strings.Split(strings.TrimSpace(porcelain), "\n")
+	files := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if len(line) < 3 {
+			continue
+		}
+		name := strings.TrimSpace(line[3:])
+		// Renames: "old -> new" — keep only the destination.
+		if idx := strings.Index(name, " -> "); idx != -1 {
+			name = name[idx+4:]
+		}
+		files = append(files, name)
+	}
+
+	applyBrainGitProfile(brainPath, cfg)
+
+	hostname, _ := os.Hostname()
+	date := time.Now().Format("Mon, 02 Jan 2006 15:04")
+	msg := fmt.Sprintf("%d brain files from %s on %s\nAffected files:\n%s",
+		len(files), hostname, date, strings.Join(files, "\n"))
+
+	remote := cfg.Brain.URL
+	if remote == "" {
+		remote = brainGitOutput(brainPath, "remote", "get-url", "origin")
+	}
+	fmt.Println(tui.SectionHeader("brain push", remote))
+	fmt.Println()
+
+	if out, err := gitIn(brainPath, "add", "-A"); err != nil {
+		return fmt.Errorf("git add: %s", strings.TrimSpace(out))
+	}
+
+	if out, err := gitIn(brainPath, "commit", "-m", msg); err != nil {
+		return fmt.Errorf("git commit: %s", strings.TrimSpace(out))
+	}
+	fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render(strings.SplitN(msg, "\n", 2)[0]))
+	fmt.Println()
+
+	cmd := exec.Command("git", "-C", brainPath, "push")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git push failed: %w", err)
 	}
 
 	return nil

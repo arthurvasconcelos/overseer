@@ -33,11 +33,8 @@ func runInit(_ *cobra.Command, _ []string) error {
 
 	if _, err := os.Stat(localPath); err == nil {
 		fmt.Printf("config.local.yaml already exists at %s\n\n", fileLink(localPath))
-		idx, err := tui.Select("overwrite it?", []tui.SelectItem{
-			{Title: "yes", Subtitle: "replace the existing file"},
-			{Title: "no", Subtitle: "keep the existing file and exit"},
-		})
-		if err != nil || idx != 0 {
+		confirmed, err := tui.Confirm("overwrite it?")
+		if err != nil || !confirmed {
 			fmt.Println("aborted — no changes made")
 			return nil
 		}
@@ -45,7 +42,7 @@ func runInit(_ *cobra.Command, _ []string) error {
 	}
 
 	brainPath := defaultBrainPath()
-	overseerHome := defaultOverseerHome()
+	reposPath := defaultReposPath()
 	gpgSSHProgram := defaultGPGSSHProgram()
 
 	fmt.Println("brain path — directory where your personal config, dotfiles, and Brewfile live")
@@ -56,7 +53,7 @@ func runInit(_ *cobra.Command, _ []string) error {
 	fmt.Println()
 
 	fmt.Println("overseer home — directory where overseer clones managed repos")
-	overseerHome, err = tui.Prompt("overseer_home", overseerHome, overseerHome)
+	reposPath, err = tui.Prompt("repos_path", reposPath, reposPath)
 	if err != nil {
 		return err
 	}
@@ -73,7 +70,7 @@ func runInit(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("creating config dir: %w", err)
 	}
 
-	content := buildLocalConfig(brainPath, overseerHome, gpgSSHProgram)
+	content := buildLocalConfig(brainPath, reposPath, gpgSSHProgram)
 	if err := os.WriteFile(localPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("writing config.local.yaml: %w", err)
 	}
@@ -82,14 +79,14 @@ func runInit(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func buildLocalConfig(brainPath, overseerHome, gpgSSHProgram string) string {
+func buildLocalConfig(brainPath, reposPath, gpgSSHProgram string) string {
 	var sb strings.Builder
 	sb.WriteString("system:\n")
 	if brainPath != "" {
 		sb.WriteString(fmt.Sprintf("    brain_path: %s\n", brainPath))
 	}
-	if overseerHome != "" {
-		sb.WriteString(fmt.Sprintf("    overseer_home: %s\n", overseerHome))
+	if reposPath != "" {
+		sb.WriteString(fmt.Sprintf("    repos_path: %s\n", reposPath))
 	}
 	if gpgSSHProgram != "" {
 		sb.WriteString(fmt.Sprintf("    gpg_ssh_program: %s\n", gpgSSHProgram))
@@ -106,9 +103,9 @@ func defaultBrainPath() string {
 	return filepath.Join(home, "brain")
 }
 
-// defaultOverseerHome tries to detect a sensible default for overseer_home.
+// defaultReposPath tries to detect a sensible default for repos_path.
 // It prefers the parent of the binary's directory, falling back to the cwd.
-func defaultOverseerHome() string {
+func defaultReposPath() string {
 	exe, err := os.Executable()
 	if err == nil {
 		candidate := filepath.Dir(filepath.Dir(exe))

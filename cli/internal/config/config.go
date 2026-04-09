@@ -10,7 +10,7 @@ import (
 
 // BrewConfig holds Homebrew-related settings.
 type BrewConfig struct {
-	Brewfile string `mapstructure:"brewfile"` // path relative to overseer_home; defaults to "Brewfile"
+	Brewfile string `mapstructure:"brewfile"` // path relative to repos_path; defaults to "Brewfile"
 }
 
 // BrainConfig holds settings for the user's brain directory.
@@ -106,7 +106,7 @@ type GoogleAccount struct {
 
 // ObsidianConfig holds settings for the Obsidian vault integration.
 type ObsidianConfig struct {
-	VaultPath          string `mapstructure:"vault_path"`           // relative to overseer_home or absolute
+	VaultPath          string `mapstructure:"vault_path"`           // relative to repos_path or absolute
 	VaultName          string `mapstructure:"vault_name"`           // basename as registered in Obsidian (for URI scheme)
 	DailyNotesFolder   string `mapstructure:"daily_notes_folder"`   // e.g. "06 - Daily"
 	TemplatesFolder    string `mapstructure:"templates_folder"`     // e.g. "99 - Meta/_templates"
@@ -116,7 +116,7 @@ type ObsidianConfig struct {
 // SystemConfig holds machine-specific overrides (lives in config.local.yaml).
 type SystemConfig struct {
 	GPGSSHProgram string `mapstructure:"gpg_ssh_program"`
-	OverseerHome  string `mapstructure:"overseer_home"`
+	ReposPath     string `mapstructure:"repos_path"`
 	BrainPath     string `mapstructure:"brain_path"`
 }
 

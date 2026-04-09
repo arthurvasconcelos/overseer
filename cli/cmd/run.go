@@ -25,7 +25,8 @@ var runCmd = &cobra.Command{
 Examples:
   overseer run --gitlab work -- curl -H "PRIVATE-TOKEN: $GITLAB_TOKEN" https://$GITLAB_HOST/api/v4/...
   overseer run --github personal -- gh repo list
-  overseer run --env my-env -- make deploy`,
+  overseer run --env p24 -- make deploy
+  overseer run --env h4e7em6mxcdlsewgnzrqldjizi -- make deploy`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runRun,
 }
@@ -33,7 +34,7 @@ Examples:
 func init() {
 	runCmd.Flags().StringVar(&runGitLabName, "gitlab", "", "GitLab instance name from config (injects GITLAB_TOKEN, GITLAB_HOST)")
 	runCmd.Flags().StringVar(&runGitHubName, "github", "", "GitHub instance name from config (injects GITHUB_TOKEN)")
-	runCmd.Flags().StringVar(&runEnvID, "env", "", "1Password environment ID (delegates to `op run --environment`; mutually exclusive with --gitlab/--github)")
+	runCmd.Flags().StringVar(&runEnvID, "env", "", "1Password environment name from config (e.g. p24) or raw environment ID; mutually exclusive with --gitlab/--github")
 	rootCmd.AddCommand(runCmd)
 }
 
@@ -43,7 +44,14 @@ func runRun(_ *cobra.Command, args []string) error {
 	}
 
 	if runEnvID != "" {
-		return secrets.RunWithEnv(runEnvID, args...)
+		envID := runEnvID
+		cfg, err := config.Load()
+		if err == nil {
+			if mapped, ok := cfg.Secrets.Environments[runEnvID]; ok {
+				envID = mapped
+			}
+		}
+		return secrets.RunWithEnv(envID, args...)
 	}
 
 	cfg, err := config.Load()

@@ -70,11 +70,11 @@ func runSetup(_ *cobra.Command, _ []string) error {
 	fmt.Println(tui.SectionHeader("machine", "settings specific to this machine"))
 	fmt.Println()
 
-	currentHome := existing.System.OverseerHome
+	currentHome := existing.System.ReposPath
 	if currentHome == "" {
-		currentHome = defaultOverseerHome()
+		currentHome = defaultReposPath()
 	}
-	overseerHome, err := tui.Prompt("overseer_home (where managed repos are cloned)", currentHome, currentHome)
+	reposPath, err := tui.Prompt("repos_path (where managed repos are cloned)", currentHome, currentHome)
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func runSetup(_ *cobra.Command, _ []string) error {
 		if err := os.MkdirAll(filepath.Dir(localPath), 0755); err != nil {
 			return fmt.Errorf("creating config dir: %w", err)
 		}
-		content := buildLocalConfig(brainPath, overseerHome, gpgSSHProgram)
+		content := buildLocalConfig(brainPath, reposPath, gpgSSHProgram)
 		if err := os.WriteFile(localPath, []byte(content), 0644); err != nil {
 			return fmt.Errorf("writing config.local.yaml: %w", err)
 		}
@@ -184,7 +184,23 @@ func runSetup(_ *cobra.Command, _ []string) error {
 	fmt.Println()
 
 	// -------------------------------------------------------------------------
-	// Section 4: Dotfiles
+	// Section 4: Brain version control (optional)
+	// -------------------------------------------------------------------------
+	fmt.Println(tui.SectionHeader("brain", "version control (optional)"))
+	fmt.Println()
+
+	if !dryRun {
+		if err := runSetupBrainGit(cfg, brainURL); err != nil {
+			fmt.Println(tui.WarnLine("git", err.Error()))
+		}
+	} else {
+		fmt.Printf("  %s\n", tui.StyleMuted.Render("skipped in dry-run mode"))
+	}
+
+	fmt.Println()
+
+	// -------------------------------------------------------------------------
+	// Section 5: Dotfiles
 	// -------------------------------------------------------------------------
 	fmt.Println(tui.SectionHeader("dotfiles", "wire from brain into ~/"))
 	fmt.Println()
@@ -260,6 +276,42 @@ func runBrainSetup(cfg *config.Config, dry bool) error {
 	}
 
 	fmt.Println("\nDone.")
+	return nil
+}
+
+// runSetupBrainGit is called from the setup wizard to optionally initialize
+// the brain as a git repository. It is a no-op if the brain is already a repo.
+func runSetupBrainGit(cfg *config.Config, configuredURL string) error {
+	brainPath := config.ResolveBrainPath(cfg)
+
+	if brainIsGit(brainPath) {
+		fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("already a git repository — skipping"))
+		return nil
+	}
+
+	confirmed, err := tui.Confirm("set up brain as a git repository?")
+	if err != nil || !confirmed {
+		fmt.Printf("  %s\n", tui.StyleMuted.Render("skipped — brain will remain a plain folder"))
+		return nil
+	}
+	fmt.Println()
+
+	idx, err := tui.Select("new brain or clone an existing repository?", []tui.SelectItem{
+		{Title: "new brain", Subtitle: "git init + optional remote + initial commit"},
+		{Title: "clone existing", Subtitle: "fetch from a remote and replace local files"},
+	})
+	if err != nil || idx == -1 {
+		fmt.Printf("  %s\n", tui.StyleMuted.Render("skipped"))
+		return nil
+	}
+	fmt.Println()
+
+	switch idx {
+	case 0:
+		return initBrainRepo(cfg, configuredURL)
+	case 1:
+		return cloneExistingBrain(cfg, configuredURL)
+	}
 	return nil
 }
 
