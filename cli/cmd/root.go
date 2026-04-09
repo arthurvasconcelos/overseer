@@ -16,12 +16,6 @@ var rootCmd = &cobra.Command{
 	Long: `overseer is a personal CLI tool for bootstrapping machines, managing
 dotfiles, and integrating with daily tools like Slack, Google Calendar,
 and 1Password.`,
-	PersistentPreRun: func(_ *cobra.Command, _ []string) {
-		startUpdateCheck()
-	},
-	PersistentPostRun: func(_ *cobra.Command, _ []string) {
-		printUpdateNotice()
-	},
 }
 
 func Execute() {
@@ -32,5 +26,6 @@ func init() {
 	rootCmd.Version = Version
 	rootCmd.SetVersionTemplate("overseer {{.Version}}\n")
 	rootCmd.PersistentFlags().StringVar(&outputFormat, "format", "text", "Output format: text or json")
+	rootCmd.InitDefaultCompletionCmd()
 	registerPlugins()
 }

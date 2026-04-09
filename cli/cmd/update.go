@@ -22,10 +22,6 @@ var updateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Update overseer to the latest release",
 	RunE:  runUpdate,
-	// Suppress the background update check and post-run notice — this command
-	// already handles version checking and updating explicitly.
-	PersistentPreRun:  func(*cobra.Command, []string) {},
-	PersistentPostRun: func(*cobra.Command, []string) {},
 }
 
 func init() {
@@ -35,43 +31,6 @@ func init() {
 const githubRepo = "arthurvasconcelos/overseer"
 
 func trimV(v string) string { return strings.TrimPrefix(v, "v") }
-
-// updateCheckResult holds the result of the background version check.
-var updateCheckResult = make(chan string, 1)
-
-// startUpdateCheck kicks off a background goroutine that fetches the latest
-// release tag. Called from root PersistentPreRun so it runs alongside every
-// command. The result is consumed in PersistentPostRun.
-func startUpdateCheck() {
-	go func() {
-		client := &http.Client{Timeout: 5 * time.Second}
-		tag, err := fetchLatestTag(client)
-		if err != nil {
-			updateCheckResult <- ""
-			return
-		}
-		latest := trimV(tag)
-		current := trimV(Version)
-		if current != "dev" && latest != current {
-			updateCheckResult <- tag
-		} else {
-			updateCheckResult <- ""
-		}
-	}()
-}
-
-// printUpdateNotice reads the background check result and prints a notice if
-// a newer version is available. Called from root PersistentPostRun.
-func printUpdateNotice() {
-	select {
-	case tag := <-updateCheckResult:
-		if tag != "" {
-			fmt.Println(tui.UpdateNotice(Version, tag))
-		}
-	case <-time.After(500 * time.Millisecond):
-		// Check didn't finish in time — skip silently to avoid delaying the user.
-	}
-}
 
 func runUpdate(_ *cobra.Command, _ []string) error {
 	client := &http.Client{Timeout: 30 * time.Second}
