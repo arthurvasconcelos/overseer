@@ -32,6 +32,7 @@ var gitSetupGlobal bool
 func init() {
 	gitSetupCmd.Flags().BoolVar(&gitSetupGlobal, "global", false, "Apply profile to global git config instead of local repo")
 	gitCmd.AddCommand(gitSetupCmd)
+	gitCmd.AddCommand(profileCmd)
 	rootCmd.AddCommand(gitCmd)
 }
 

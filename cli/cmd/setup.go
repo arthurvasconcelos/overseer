@@ -91,6 +91,76 @@ func runSetup(_ *cobra.Command, _ []string) error {
 	fmt.Println()
 
 	// -------------------------------------------------------------------------
+	// Section 3: Git defaults + initial profile (skipped if profiles exist)
+	// -------------------------------------------------------------------------
+	fmt.Println(tui.SectionHeader("git", "identity profiles"))
+	fmt.Println()
+
+	if len(existing.Git.Profiles) > 0 {
+		fmt.Printf("  %s  %s\n", tui.StyleDim.Render("[skip]"), tui.StyleMuted.Render(fmt.Sprintf("%d profile(s) already configured", len(existing.Git.Profiles))))
+		fmt.Println()
+	} else {
+		wantsDefaults, err := tui.Confirm("configure git defaults (user name, gpg format, signing)?")
+		if err != nil {
+			return err
+		}
+		fmt.Println()
+
+		var gitDefaults config.GitDefaults
+		if wantsDefaults {
+			gitDefaults, err = promptDefaults(existing.Git.Defaults)
+			if err != nil {
+				return err
+			}
+		}
+
+		wantsProfile, err := tui.Confirm("create an initial git profile?")
+		if err != nil {
+			return err
+		}
+		fmt.Println()
+
+		var initialProfile *config.GitProfile
+		if wantsProfile {
+			p, err := promptProfile(config.GitProfile{}, gitDefaults)
+			if err != nil {
+				return err
+			}
+			initialProfile = &p
+		}
+
+		// Write defaults and profile into brain config now so later wizard
+		// steps (e.g. brain git-init) can reference them.
+		if wantsDefaults || initialProfile != nil {
+			brainOverseerDir := config.BrainOverseerPath(existing)
+			cfgPath := filepath.Join(brainOverseerDir, "config.yaml")
+
+			// Brain dir may not exist yet — that's OK, it's created in Section 4.
+			// Only write if the dir exists; otherwise defer until brain scaffold runs.
+			if _, statErr := os.Stat(brainOverseerDir); statErr == nil {
+				doc, readErr := config.ReadConfigNode(cfgPath)
+				if readErr == nil {
+					if wantsDefaults {
+						config.SetDefaults(doc, gitDefaults)
+					}
+					if initialProfile != nil {
+						config.UpsertProfile(doc, *initialProfile)
+					}
+					_ = config.WriteConfigNode(cfgPath, doc)
+				}
+			}
+
+			if wantsDefaults {
+				fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("git defaults saved"))
+			}
+			if initialProfile != nil {
+				fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("profile "+initialProfile.Name+" created"))
+			}
+			fmt.Println()
+		}
+	}
+
+	// -------------------------------------------------------------------------
 	// Write config.local.yaml
 	// -------------------------------------------------------------------------
 	localPath, err := config.LocalPath()
