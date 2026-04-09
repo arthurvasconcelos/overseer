@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/arthurvasconcelos/overseer/internal/tui"
+	"github.com/charmbracelet/bubbles/progress"
 	"github.com/spf13/cobra"
 )
 
@@ -130,6 +131,37 @@ func fetchLatestTag(client *http.Client) (string, error) {
 	return release.TagName, nil
 }
 
+// progressReader wraps an io.Reader and calls onRead after every read with the
+// cumulative bytes read and the total size (may be -1 if unknown).
+type progressReader struct {
+	r      io.Reader
+	total  int64
+	read   int64
+	onRead func(read, total int64)
+}
+
+func (pr *progressReader) Read(p []byte) (n int, err error) {
+	n, err = pr.r.Read(p)
+	pr.read += int64(n)
+	if pr.onRead != nil {
+		pr.onRead(pr.read, pr.total)
+	}
+	return
+}
+
+func formatBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
 func downloadAndInstall(client *http.Client, tag, version, installDir string) error {
 	os_ := runtime.GOOS
 	arch := runtime.GOARCH
@@ -137,7 +169,7 @@ func downloadAndInstall(client *http.Client, tag, version, installDir string) er
 	archive := fmt.Sprintf("overseer_%s_%s_%s.tar.gz", version, os_, arch)
 	url := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", githubRepo, tag, archive)
 
-	fmt.Printf("downloading %s...\n", archive)
+	fmt.Printf("downloading %s\n", archive)
 
 	resp, err := client.Get(url)
 	if err != nil {
@@ -149,7 +181,22 @@ func downloadAndInstall(client *http.Client, tag, version, installDir string) er
 		return fmt.Errorf("download failed: %s", resp.Status)
 	}
 
-	binary, err := extractBinary(resp.Body)
+	prog := progress.New(progress.WithDefaultGradient(), progress.WithWidth(50))
+	pr := &progressReader{
+		r:     resp.Body,
+		total: resp.ContentLength,
+		onRead: func(read, total int64) {
+			if total > 0 {
+				bar := prog.ViewAs(float64(read) / float64(total))
+				fmt.Printf("\r%s  %s / %s", bar, formatBytes(read), formatBytes(total))
+			} else {
+				fmt.Printf("\r%s downloaded", formatBytes(read))
+			}
+		},
+	}
+
+	binary, err := extractBinary(pr)
+	fmt.Println()
 	if err != nil {
 		return err
 	}
