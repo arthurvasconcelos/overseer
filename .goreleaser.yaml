@@ -31,6 +31,24 @@ archives:
 checksum:
   name_template: "overseer_{{ .Version }}_checksums.txt"
 
+brews:
+  - name: overseer
+    repository:
+      owner: arthurvasconcelos
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/arthurvasconcelos/overseer"
+    description: "Personal CLI for environment setup and daily automation"
+    license: "MIT"
+    install: |
+      bin.install "overseer"
+      system bin/"overseer", "generate-docs", "#{buildpath}/man"
+      man1.install Dir["#{buildpath}/man/*.1"]
+      generate_completions_from_executable(bin/"overseer", "completion")
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/overseer --version")
+
 release:
   github:
     owner: arthurvasconcelos
