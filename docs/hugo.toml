@@ -2,6 +2,12 @@ baseURL = "https://arthurvasconcelos.com.br/overseer/"
 languageCode = "en-us"
 title = "overseer"
 
+[outputs]
+  home = ["HTML"]
+  section = ["HTML"]
+  taxonomy = ["HTML"]
+  term = ["HTML"]
+
 [module]
   [[module.imports]]
     path = "github.com/imfing/hextra"

@@ -18,5 +18,5 @@ layout: hextra-home
   {{< card link="/concepts/secrets" title="Secrets" icon="lock-closed" subtitle="1Password references resolved at runtime. Nothing stored in plaintext." >}}
   {{< card link="/commands" title="Commands" icon="terminal" subtitle="Full reference for all overseer subcommands and flags." >}}
   {{< card link="/plugins" title="Plugins" icon="puzzle" subtitle="Drop any overseer-* binary in your brain and it becomes a subcommand." >}}
-  {{< card link="/install" title="Install" icon="arrow-down-tray" subtitle="Homebrew, manual install, and first-time setup." >}}
+  {{< card link="/install" title="Install" icon="cloud-download" subtitle="Homebrew, manual install, and first-time setup." >}}
 {{< /cards >}}
