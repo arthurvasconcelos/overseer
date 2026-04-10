@@ -6,7 +6,7 @@ layout: hextra-home
 {{< hextra/hero-container >}}
   {{< hextra/hero-headline >}}Your developer workflow,&nbsp;<br class="sm:block hidden" />one binary.{{< /hextra/hero-headline >}}
   {{< hextra/hero-subtitle >}}
-    overseer is a single Go binary that unifies daily developer workflows: git identities, repo management, morning briefings, notes, PR monitoring, and Homebrew — all driven by a private config repo you own.
+    A single Go binary for your daily developer workflow —<br class="sm:block hidden" />git identities, repos, briefings, notes, PR monitoring, and Homebrew,<br class="sm:block hidden" />all driven by a private config repo you own.
   {{< /hextra/hero-subtitle >}}
   {{< hextra/hero-button text="Get started" link="/install" >}}
   {{< hextra/hero-button text="Command reference" link="/commands" style="outline" >}}

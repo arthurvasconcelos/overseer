@@ -1,6 +1,7 @@
 baseURL = "https://arthurvasconcelos.com.br/overseer/"
 languageCode = "en-us"
 title = "overseer"
+canonifyURLs = true
 
 [outputs]
   home = ["HTML"]
