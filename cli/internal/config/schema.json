@@ -18,6 +18,17 @@
         }
       }
     },
+    "plugins": {
+      "description": "Native plugin overrides. Keys are plugin names (e.g. \"jira\", \"slack\", \"claude\"). Use to explicitly enable or disable a plugin independent of its integration config.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "settings": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/pluginSettings" }
+        }
+      }
+    },
     "integrations": {
       "description": "Third-party integration configurations. Each integration supports multiple named instances.",
       "type": "object",
@@ -317,6 +328,17 @@
         "op_account": {
           "description": "1Password account ID used to resolve op:// references in this profile.",
           "type": "string"
+        }
+      }
+    },
+    "pluginSettings": {
+      "description": "Enable or disable a specific native plugin.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "description": "Explicitly enable (true) or disable (false) this plugin.",
+          "type": "boolean"
         }
       }
     },

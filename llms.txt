@@ -275,7 +275,40 @@ Top-level config keys:
 
 ## Plugin system
 
-overseer supports external plugins: any binary named `overseer-<name>` on PATH or in `brain/plugins/` is automatically registered as a subcommand `overseer <name>`.
+overseer supports two plugin types:
+
+### Native plugins (compiled-in)
+
+Native plugins ship with the binary and integrate directly with `daily` and `status`. They are enabled/disabled via config:
+
+```yaml
+plugins:
+  settings:
+    jira:
+      enabled: false  # disable an integration plugin
+    claude:
+      enabled: true   # opt-in plugin
+```
+
+Built-in native plugins: `jira`, `slack`, `google`, `github`, `gitlab`, `obsidian`, `claude`.
+
+The `claude` plugin manages symlinks between `<brain>/claude/` and `~/.claude/` (settings, CLAUDE.md, plans, memory, hooks, skills). Run `overseer claude setup` for an interactive wizard.
+
+List native plugins and their state: `overseer plugins`
+
+### External plugins (executables)
+
+Any binary named `overseer-<name>` on PATH or in `brain/overseer/plugins/` is registered as `overseer <name>`. An optional sidecar manifest `overseer-<name>.json` declares description, secrets, and hooks:
+
+```json
+{
+  "description": "My plugin",
+  "secrets": ["github.personal"],
+  "hooks": ["daily", "status"]
+}
+```
+
+External plugins that declare `"hooks": ["daily"]` are called with the `daily` argument during `overseer daily` (stdout printed as a section). Those that declare `"hooks": ["status"]` are called with `status` and must output a JSON array of `{"name","ok","message"}` items.
 
 Plugin SDKs are available for Python (`sdk/python/`) and TypeScript (`sdk/typescript/`) in the overseer repository.
 

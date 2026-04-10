@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/viper"
+	"go.yaml.in/yaml/v3"
 )
 
 // BrewConfig holds Homebrew-related settings.
@@ -22,10 +23,23 @@ type BrainConfig struct {
 	GitProfile string `mapstructure:"git_profile" json:"git_profile,omitempty"` // git profile to use for brain commits
 }
 
+// PluginSettings allows explicitly enabling or disabling a named native plugin.
+// When absent, the plugin's own IsEnabled logic applies (typically: enabled if
+// the matching integrations section is non-empty).
+type PluginSettings struct {
+	Enabled bool `mapstructure:"enabled" json:"enabled,omitempty"`
+}
+
+// PluginsConfig holds per-plugin enable/disable overrides, keyed by plugin name.
+type PluginsConfig struct {
+	Settings map[string]PluginSettings `mapstructure:"settings" json:"settings,omitempty"`
+}
+
 // Config holds all overseer configuration values.
 type Config struct {
 	Secrets      SecretsConfig      `mapstructure:"secrets"      json:"secrets,omitempty"`
 	Integrations IntegrationsConfig `mapstructure:"integrations" json:"integrations,omitempty"`
+	Plugins      PluginsConfig      `mapstructure:"plugins"      json:"plugins,omitempty"`
 	Git          GitConfig          `mapstructure:"git"          json:"git,omitempty"`
 	System       SystemConfig       `mapstructure:"system"       json:"system,omitempty"`
 	Brain        BrainConfig        `mapstructure:"brain"        json:"brain,omitempty"`
@@ -196,6 +210,107 @@ func LocalPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "overseer", "config.local.yaml"), nil
+}
+
+// WriteBrainPluginSettings updates only the plugins.settings section of the
+// brain config file. All other keys and their ordering are preserved.
+// settings maps plugin name → PluginSettings. A nil entry removes the override.
+func WriteBrainPluginSettings(cfg *Config, settings map[string]*PluginSettings) error {
+	brainCfgPath := filepath.Join(BrainOverseerPath(cfg), "config.yaml")
+
+	// Read existing file (or start with empty doc).
+	var root yaml.Node
+	if data, err := os.ReadFile(brainCfgPath); err == nil {
+		if err := yaml.Unmarshal(data, &root); err != nil {
+			return fmt.Errorf("parsing brain config: %w", err)
+		}
+	}
+
+	// yaml.Unmarshal wraps the document in a Document node.
+	var docContent *yaml.Node
+	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
+		docContent = root.Content[0]
+	} else {
+		// Empty or non-existent file — create a mapping node.
+		docContent = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		root = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{docContent}}
+	}
+
+	// Navigate/create the plugins → settings mapping.
+	pluginsNode := findOrCreateMapping(docContent, "plugins")
+	settingsNode := findOrCreateMapping(pluginsNode, "settings")
+
+	for name, ps := range settings {
+		if ps == nil {
+			// Remove the key entirely so the plugin reverts to default behaviour.
+			removeKey(settingsNode, name)
+			continue
+		}
+		entryNode := findOrCreateMapping(settingsNode, name)
+		setBool(entryNode, "enabled", ps.Enabled)
+	}
+
+	// If settings is now empty, remove the plugins key to keep the file clean.
+	if len(settingsNode.Content) == 0 {
+		removeKey(pluginsNode, "settings")
+	}
+	if len(pluginsNode.Content) == 0 {
+		removeKey(docContent, "plugins")
+	}
+
+	data, err := yaml.Marshal(&root)
+	if err != nil {
+		return fmt.Errorf("marshaling brain config: %w", err)
+	}
+
+	if err := os.WriteFile(brainCfgPath, data, 0o644); err != nil {
+		return fmt.Errorf("writing brain config: %w", err)
+	}
+	return nil
+}
+
+// findOrCreateMapping finds the value mapping node for key in parent (a mapping
+// node), creating both the key and an empty mapping value if absent.
+func findOrCreateMapping(parent *yaml.Node, key string) *yaml.Node {
+	for i := 0; i+1 < len(parent.Content); i += 2 {
+		if parent.Content[i].Value == key {
+			return parent.Content[i+1]
+		}
+	}
+	keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}
+	valNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	parent.Content = append(parent.Content, keyNode, valNode)
+	return valNode
+}
+
+// setBool sets key=value in a mapping node, updating in place or appending.
+func setBool(parent *yaml.Node, key string, value bool) {
+	tag := "!!bool"
+	val := "false"
+	if value {
+		val = "true"
+	}
+	for i := 0; i+1 < len(parent.Content); i += 2 {
+		if parent.Content[i].Value == key {
+			parent.Content[i+1].Value = val
+			parent.Content[i+1].Tag = tag
+			return
+		}
+	}
+	parent.Content = append(parent.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: val},
+	)
+}
+
+// removeKey removes a key-value pair from a mapping node.
+func removeKey(parent *yaml.Node, key string) {
+	for i := 0; i+1 < len(parent.Content); i += 2 {
+		if parent.Content[i].Value == key {
+			parent.Content = append(parent.Content[:i], parent.Content[i+2:]...)
+			return
+		}
+	}
 }
 
 // Load reads config with this merge order (later overrides earlier):

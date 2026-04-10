@@ -28,4 +28,5 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&outputFormat, "format", "text", "Output format: text or json")
 	rootCmd.InitDefaultCompletionCmd()
 	registerPlugins()
+	registerNativePluginCommands()
 }

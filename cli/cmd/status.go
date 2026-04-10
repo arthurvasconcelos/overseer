@@ -10,10 +10,7 @@ import (
 	"time"
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
-	"github.com/arthurvasconcelos/overseer/internal/gcal"
-	"github.com/arthurvasconcelos/overseer/internal/jira"
-	"github.com/arthurvasconcelos/overseer/internal/secrets"
-	overseerslack "github.com/arthurvasconcelos/overseer/internal/slack"
+	"github.com/arthurvasconcelos/overseer/internal/nativeplugin"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -59,27 +56,30 @@ func runStatus(_ *cobra.Command, _ []string) error {
 
 	checks = append(checks, checkFn{"1password", checkOnePassword})
 
-	for _, j := range cfg.Integrations.Jira {
-		j := j
-		checks = append(checks, checkFn{
-			name: "jira/" + j.Name,
-			fn:   func() checkResult { return checkJira(ctx, j) },
-		})
+	for _, p := range nativeplugin.Enabled(cfg) {
+		if p.StatusChecks == nil {
+			continue
+		}
+		for _, sc := range p.StatusChecks(cfg) {
+			sc := sc
+			checks = append(checks, checkFn{
+				name: sc.Name,
+				fn: func() checkResult {
+					ok, msg := sc.Run(ctx)
+					return checkResult{name: sc.Name, ok: ok, msg: msg}
+				},
+			})
+		}
 	}
 
-	for _, s := range cfg.Integrations.Slack {
-		s := s
+	// Append checks from external plugins that declared the "status" hook.
+	for _, ep := range ExternalPluginsWithHook("status") {
+		ep := ep
 		checks = append(checks, checkFn{
-			name: "slack/" + s.Name,
-			fn:   func() checkResult { return checkSlack(s) },
-		})
-	}
-
-	for _, g := range cfg.Integrations.Google {
-		g := g
-		checks = append(checks, checkFn{
-			name: "google/" + g.Name,
-			fn:   func() checkResult { return checkGoogle(g) },
+			name: ep.name,
+			fn: func() checkResult {
+				return runExternalStatusHook(ep)
+			},
 		})
 	}
 
@@ -146,50 +146,31 @@ func checkOnePassword() checkResult {
 	return checkResult{ok: true, msg: fmt.Sprintf("signed in (%d %s)", len(accounts), noun)}
 }
 
-func checkJira(ctx context.Context, inst config.JiraInstance) checkResult {
-	email, err := secrets.ReadAs(inst.Email, inst.OPAccount)
+// runExternalStatusHook calls an external plugin with the "status" hook and
+// parses its JSON output into checkResult entries. If the plugin outputs
+// multiple items, the first is returned with its name as the label; the rest
+// are silently merged into the result message. For full multi-item support,
+// native plugins are the recommended path.
+func runExternalStatusHook(ep externalPlugin) checkResult {
+	out, err := runHook(ep, "status")
 	if err != nil {
-		return checkResult{ok: false, msg: "could not read email: " + err.Error()}
+		return checkResult{name: ep.name, ok: false, msg: err.Error()}
 	}
-	token, err := secrets.ReadAs(inst.Token, inst.OPAccount)
-	if err != nil {
-		return checkResult{ok: false, msg: "could not read token: " + err.Error()}
+	var items []checkResultJSON
+	if err := json.Unmarshal([]byte(out), &items); err != nil || len(items) == 0 {
+		return checkResult{name: ep.name, ok: true, msg: strings.TrimSpace(out)}
 	}
-	authedEmail, err := jira.New(inst.BaseURL, email, token).Ping(ctx)
-	if err != nil {
-		return checkResult{ok: false, msg: err.Error()}
+	// Return the first item; additional items are appended to its message.
+	r := checkResult{name: items[0].Name, ok: items[0].OK, msg: items[0].Message}
+	for _, extra := range items[1:] {
+		sign := "✓"
+		if !extra.OK {
+			sign = "✗"
+			r.ok = false
+		}
+		r.msg += fmt.Sprintf(" | %s %s: %s", sign, extra.Name, extra.Message)
 	}
-	return checkResult{ok: true, msg: authedEmail}
-}
-
-func checkSlack(ws config.SlackWorkspace) checkResult {
-	token, err := secrets.ReadAs(ws.Token, ws.OPAccount)
-	if err != nil {
-		return checkResult{ok: false, msg: "could not read token: " + err.Error()}
-	}
-	username, err := overseerslack.New(token).Ping()
-	if err != nil {
-		return checkResult{ok: false, msg: err.Error()}
-	}
-	return checkResult{ok: true, msg: "@" + username}
-}
-
-func checkGoogle(acc config.GoogleAccount) checkResult {
-	info, err := gcal.TokenStatus(acc.Name)
-	if err != nil {
-		return checkResult{ok: false, msg: err.Error()}
-	}
-	if !info.Present {
-		return checkResult{ok: false, msg: "no token — run: overseer daily to authorize"}
-	}
-	if !info.Valid {
-		return checkResult{ok: false, msg: "token expired — run: overseer daily to refresh"}
-	}
-	until := time.Until(info.Expiry)
-	if until > 0 {
-		return checkResult{ok: true, msg: fmt.Sprintf("token valid (expires in %s)", formatDuration(until))}
-	}
-	return checkResult{ok: true, msg: "token valid"}
+	return r
 }
 
 func formatDuration(d time.Duration) string {

@@ -3,17 +3,20 @@ title: daily
 weight: 7
 ---
 
-Morning briefing: fetches and displays today's Jira tickets, Slack mentions, Google Calendar events, and open PRs — all in parallel.
+Morning briefing: fetches and displays today's Jira tickets, Slack mentions, Google Calendar events — all in parallel.
 
 ```bash
 overseer daily
 ```
 
-Requires configured integrations in `config.yaml`:
+Sections are contributed by **enabled native plugins**. Each plugin runs in its own goroutine and results are printed in a deterministic order. Integrations that are not enabled are silently skipped.
 
-- **Jira** — `integrations.jira[]` with `base_url`, `email`, `token`
-- **Slack** — `integrations.slack[]` with `token`
-- **Google Calendar** — `integrations.google[]` with `credentials_doc`
-- **GitHub/GitLab** — `integrations.github[]` / `integrations.gitlab[]` for the PR section
+Built-in plugins that contribute to `daily`:
 
-Integrations that are not configured are silently skipped. You can configure as many or as few as you need.
+| Plugin | Config key | What it shows |
+|---|---|---|
+| `jira` | `integrations.jira[]` | Open issues assigned to you |
+| `slack` | `integrations.slack[]` | Recent mentions |
+| `google` | `integrations.google[]` | Today's calendar events |
+
+External plugins can also contribute a section by declaring `"hooks": ["daily"]` in their [sidecar manifest](/docs/plugins/) and handling the `daily` argument when called.

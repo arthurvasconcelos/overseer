@@ -22,6 +22,29 @@ Place `overseer-<name>.json` alongside the binary to declare metadata:
 ```json
 {
   "description": "My plugin description",
-  "secrets": ["github.personal"]
+  "secrets": ["github.personal"],
+  "hooks": ["daily", "status"]
 }
+```
+
+| Field | Description |
+|---|---|
+| `description` | Shown in `overseer --help` and `overseer plugins` |
+| `secrets` | Integration references resolved and injected via `OVERSEER_CONTEXT` |
+| `hooks` | Participate in `daily` and/or `status` output |
+
+## Hooks
+
+### `daily`
+
+When `hooks` includes `"daily"`, overseer calls `overseer-<name> daily` during
+`overseer daily`. Write your section to stdout; it will be printed in the briefing.
+
+### `status`
+
+When `hooks` includes `"status"`, overseer calls `overseer-<name> status` during
+`overseer status`. Output must be a JSON array:
+
+```json
+[{ "name": "my-check", "ok": true, "message": "all good" }]
 ```
