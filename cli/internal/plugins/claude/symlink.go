@@ -59,6 +59,7 @@ func wellKnownTargets(claudeDir string) []managedTarget {
 		{name: "memory/", brainRel: "memory", localPath: filepath.Join(dotClaude, "memory"), kind: linkWholeDir},
 		{name: "hooks/", brainRel: "hooks", localPath: filepath.Join(dotClaude, "hooks"), kind: linkChildren},
 		{name: "skills/", brainRel: "skills", localPath: filepath.Join(dotClaude, "skills"), kind: linkChildren},
+		{name: "scripts/", brainRel: "scripts", localPath: filepath.Join(dotClaude, "scripts"), kind: linkChildren},
 	}
 }
 
