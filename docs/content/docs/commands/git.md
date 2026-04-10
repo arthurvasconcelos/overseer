@@ -88,4 +88,4 @@ overseer git profile defaults
 
 ## Config
 
-Profiles are stored in `git.profiles[]` and shared defaults in `git.defaults`. See [Concepts → Config](/concepts/config#git) for the full schema.
+Profiles are stored in `git.profiles[]` and shared defaults in `git.defaults`. See [Concepts → Config](/docs/concepts/config#git) for the full schema.

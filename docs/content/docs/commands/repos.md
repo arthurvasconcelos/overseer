@@ -59,4 +59,4 @@ overseer repos setup
 
 ## Config
 
-Repos are defined in `repos[]` in config. See [Concepts → Config](/concepts/config#repos) for all fields.
+Repos are defined in `repos[]` in config. See [Concepts → Config](/docs/concepts/config#repos) for all fields.

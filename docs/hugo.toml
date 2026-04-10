@@ -37,17 +37,17 @@ canonifyURLs = true
   [[menu.main]]
     identifier = "commands"
     name = "Commands"
-    pageRef = "/commands"
+    pageRef = "/docs/commands"
     weight = 1
   [[menu.main]]
     identifier = "concepts"
     name = "Concepts"
-    pageRef = "/concepts"
+    pageRef = "/docs/concepts"
     weight = 2
   [[menu.main]]
     identifier = "plugins"
     name = "Plugins"
-    pageRef = "/plugins"
+    pageRef = "/docs/plugins"
     weight = 3
   [[menu.main]]
     identifier = "github"

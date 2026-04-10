@@ -44,4 +44,4 @@ Returns a structured command manifest with the tool name, version, description, 
 
 ## MCP alternative
 
-For persistent AI integration rather than a one-off paste, see [`overseer mcp`](/commands/mcp).
+For persistent AI integration rather than a one-off paste, see [`overseer mcp`](/docs/commands/mcp).

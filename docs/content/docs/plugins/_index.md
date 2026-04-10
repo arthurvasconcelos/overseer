@@ -50,6 +50,6 @@ Place `overseer-<name>.json` alongside the binary to declare metadata:
 Plugin SDKs are available for Python and TypeScript to simplify reading context and applying consistent styling.
 
 {{< cards >}}
-  {{< card link="/plugins/python" title="Python SDK" subtitle="pip install overseer-sdk" >}}
-  {{< card link="/plugins/typescript" title="TypeScript SDK" subtitle="npm install @arthurvasconcelos/overseer-sdk" >}}
+  {{< card link="/docs/plugins/python" title="Python SDK" subtitle="pip install overseer-sdk" >}}
+  {{< card link="/docs/plugins/typescript" title="TypeScript SDK" subtitle="npm install @arthurvasconcelos/overseer-sdk" >}}
 {{< /cards >}}

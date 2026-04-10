@@ -46,4 +46,4 @@ Add overseer as an MCP server in `~/.claude/settings.json`:
 
 ## Alternative: context dump
 
-For a one-off paste into an AI chat rather than persistent integration, use [`overseer context`](/commands/context).
+For a one-off paste into an AI chat rather than persistent integration, use [`overseer context`](/docs/commands/context).

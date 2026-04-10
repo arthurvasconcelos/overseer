@@ -26,4 +26,4 @@ Secret values (fields containing `op://` references) are shown as their referenc
 # yaml-language-server: $schema=https://arthurvasconcelos.github.io/overseer/schema.json
 ```
 
-See [Concepts → Config](/concepts/config) for all config keys.
+See [Concepts → Config](/docs/concepts/config) for all config keys.

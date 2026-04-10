@@ -52,4 +52,4 @@ secrets:
 
 Then use `overseer run --env p24 -- <command>` to run any command with those secrets injected. The alias `p24` maps to the 1Password account ID.
 
-See [`overseer run`](/commands/run) for full usage.
+See [`overseer run`](/docs/commands/run) for full usage.

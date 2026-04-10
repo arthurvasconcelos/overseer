@@ -3,7 +3,7 @@ title: brain
 weight: 2
 ---
 
-Manage the brain directory. See [Concepts → Brain](/concepts/brain) for what the brain is.
+Manage the brain directory. See [Concepts → Brain](/docs/concepts/brain) for what the brain is.
 
 ## Subcommands
 

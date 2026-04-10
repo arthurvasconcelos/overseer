@@ -40,4 +40,4 @@ overseer run --env he7em6mxcdlsewgnzrqldjizi -- make deploy
 - `--github <name>` does the same for `integrations.github[]`, exporting `GITHUB_TOKEN`.
 - `--env <name>` resolves the alias through `secrets.environments` to a 1Password account ID, then uses `op run` to inject all secrets from that account.
 
-See [Concepts → Secrets](/concepts/secrets) for how secret resolution works.
+See [Concepts → Secrets](/docs/concepts/secrets) for how secret resolution works.

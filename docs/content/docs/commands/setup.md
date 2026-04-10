@@ -20,4 +20,4 @@ Safe to re-run at any time — existing values are shown as defaults and nothing
 4. Runs `brew bundle` from the Brewfile
 5. Applies git profiles to managed repos
 
-To re-apply config without the interactive wizard, use [`overseer brain setup`](/commands/brain#overseer-brain-setup).
+To re-apply config without the interactive wizard, use [`overseer brain setup`](/docs/commands/brain#overseer-brain-setup).
