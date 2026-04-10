@@ -1,0 +1,52 @@
+baseURL = "https://arthurvasconcelos.com.br/overseer/"
+languageCode = "en-us"
+title = "overseer"
+
+[module]
+  [[module.imports]]
+    path = "github.com/imfing/hextra"
+
+[markup]
+  [markup.highlight]
+    noClasses = false
+  [markup.goldmark.renderer]
+    unsafe = true
+
+[params]
+  description = "A personal machine management CLI for developers."
+
+  [params.navbar]
+    displayTitle = true
+    displayLogo = false
+
+  [params.footer]
+    enable = true
+    displayCopyright = true
+
+  [params.editURL]
+    enable = false
+
+[menu]
+  [[menu.main]]
+    identifier = "commands"
+    name = "Commands"
+    pageRef = "/commands"
+    weight = 1
+  [[menu.main]]
+    identifier = "concepts"
+    name = "Concepts"
+    pageRef = "/concepts"
+    weight = 2
+  [[menu.main]]
+    identifier = "plugins"
+    name = "Plugins"
+    pageRef = "/plugins"
+    weight = 3
+  [[menu.main]]
+    identifier = "github"
+    name = "GitHub"
+    url = "https://github.com/arthurvasconcelos/overseer"
+    weight = 4
+    [menu.main.params]
+      type = "icon"
+      icon = "github"
