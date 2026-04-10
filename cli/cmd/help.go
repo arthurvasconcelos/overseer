@@ -23,7 +23,7 @@ var rootGroups = []cmdGroup{
 	{"Setup", []string{"setup", "brain", "accounts", "config"}},
 	{"Daily", []string{"daily", "prs", "note", "status"}},
 	{"Dev", []string{"brew", "repos", "git", "run"}},
-	{"System", []string{"update", "completion"}},
+	{"System", []string{"update", "completion", "mcp"}},
 }
 
 func styledHelp(cmd *cobra.Command, _ []string) {
