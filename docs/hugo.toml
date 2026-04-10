@@ -21,6 +21,7 @@ canonifyURLs = true
 
 [params]
   description = "A personal machine management CLI for developers."
+  customCSS = ["css/custom.css"]
 
   [params.navbar]
     displayTitle = true

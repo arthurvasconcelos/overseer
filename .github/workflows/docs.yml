@@ -28,19 +28,9 @@ jobs:
           hugo-version: "latest"
           extended: true
 
-      - name: Cache Hugo modules
-        uses: actions/cache@v4
-        with:
-          path: /tmp/hugo_cache
-          key: ${{ runner.os }}-hugo-${{ hashFiles('docs/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-hugo-
-
       - name: Build
         working-directory: docs
         run: hugo --minify
-        env:
-          HUGO_CACHEDIR: /tmp/hugo_cache
 
       - uses: actions/upload-pages-artifact@v3
         with:
