@@ -33,8 +33,9 @@ func brainClaudeDir(cfg *config.Config) string {
 
 func commands(cfg *config.Config) []*cobra.Command {
 	root := &cobra.Command{
-		Use:   "claude",
-		Short: "Manage Claude AI configuration",
+		Use:         "claude",
+		Short:       "Manage Claude AI configuration",
+		Annotations: map[string]string{"overseer/group": "AI"},
 	}
 	root.AddCommand(setupCmd(cfg))
 	root.AddCommand(listCmd(cfg))

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/arthurvasconcelos/overseer/internal/tui"
@@ -17,13 +18,15 @@ type cmdGroup struct {
 	commands []string
 }
 
-// rootGroups defines the display order and grouping for root-level commands.
-// Any command not listed here falls through to an "Other" section.
+// rootGroups defines the display order and grouping for root-level built-in commands.
+// Native plugin commands can appear in any group by setting the "overseer/group" annotation.
+// Any command not listed here and without an annotation falls through to an "Other" section.
 var rootGroups = []cmdGroup{
-	{"Setup", []string{"setup", "brain", "accounts", "config"}},
+	{"Setup", []string{"setup", "brain", "brew"}},
 	{"Daily", []string{"daily", "prs", "note", "status"}},
-	{"Dev", []string{"brew", "repos", "git", "run"}},
-	{"System", []string{"plugins", "update", "completion", "mcp"}},
+	{"Dev", []string{"run", "repos", "git"}},
+	{"AI", []string{"context", "mcp"}},
+	{"System", []string{"accounts", "config", "plugins", "update", "completion"}},
 }
 
 func styledHelp(cmd *cobra.Command, _ []string) {
@@ -103,21 +106,58 @@ func printRootCommands(cmd *cobra.Command) {
 		}
 	}
 
+	// Build the full group list: start from rootGroups, then merge in any native
+	// plugin commands that declare overseer/group. If the declared group name
+	// matches an existing group it is appended there; otherwise a new group is
+	// added at the end (sorted among other new groups).
+	type resolvedGroup struct {
+		title string
+		cmds  []*cobra.Command
+	}
+	groupIndex := map[string]int{}
+	var groups []resolvedGroup
+	for _, rg := range rootGroups {
+		groupIndex[rg.title] = len(groups)
+		groups = append(groups, resolvedGroup{title: rg.title})
+	}
+
 	rendered := map[string]bool{}
-	for _, group := range rootGroups {
-		var groupCmds []*cobra.Command
-		for _, name := range group.commands {
+	var newGroupNames []string
+	for name, c := range byName {
+		g := c.Annotations["overseer/group"]
+		if g == "" {
+			continue
+		}
+		rendered[name] = true
+		if idx, ok := groupIndex[g]; ok {
+			groups[idx].cmds = append(groups[idx].cmds, c)
+		} else {
+			groupIndex[g] = len(groups)
+			groups = append(groups, resolvedGroup{title: g, cmds: []*cobra.Command{c}})
+			newGroupNames = append(newGroupNames, g)
+		}
+	}
+
+	// Fill static group commands and mark rendered.
+	for i, rg := range rootGroups {
+		for _, name := range rg.commands {
 			if c, ok := byName[name]; ok {
-				groupCmds = append(groupCmds, c)
+				groups[i].cmds = append(groups[i].cmds, c)
 				rendered[name] = true
 			}
 		}
-		if len(groupCmds) == 0 {
+	}
+
+	// Sort any newly created groups (stable order for static ones is preserved).
+	sort.Strings(newGroupNames)
+
+	for _, g := range groups {
+		if len(g.cmds) == 0 {
 			continue
 		}
 		fmt.Println()
-		fmt.Println(tui.StyleDim.Render(group.title + ":"))
-		printCmdListAligned(groupCmds, maxLen, false)
+		fmt.Println(tui.StyleDim.Render(g.title + ":"))
+		printCmdListAligned(g.cmds, maxLen, false)
 	}
 
 	// Safety net for any commands added later that aren't in a group.
