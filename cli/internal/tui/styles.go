@@ -44,6 +44,12 @@ func UpdateNotice(current, latest string) string {
 	return "\n" + line1 + "\n" + line2
 }
 
+// Hyperlink renders text as an OSC 8 terminal hyperlink.
+// Most modern terminals (iTerm2, Kitty, WezTerm, macOS Terminal ≥ 2.12) support this.
+func Hyperlink(url, text string) string {
+	return "\x1b]8;;" + url + "\x1b\\" + text + "\x1b]8;;\x1b\\"
+}
+
 // Logo renders the overseer wordmark as a styled rounded box with an optional
 // version badge. Pass an empty string or "dev" to omit the badge.
 func Logo(version string) string {

@@ -281,6 +281,36 @@ func RenderTemplate(content string, values map[string]string) string {
 	})
 }
 
+const captureMarker = "<!-- overseer:capture -->"
+
+// AppendToDaily appends a timestamped bullet to today's daily note.
+// It inserts "- HH:MM — text" immediately after the <!-- overseer:capture -->
+// marker, or at the end of the file if the marker is not present.
+func (v *Vault) AppendToDaily(folder, text string) error {
+	filename := DailyFilename()
+	path := filepath.Join(v.Path, folder, filename+".md")
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("reading daily note: %w", err)
+	}
+
+	bullet := "- " + time.Now().Format("15:04") + " — " + text
+	content := string(data)
+
+	if idx := strings.Index(content, captureMarker); idx >= 0 {
+		insertAt := idx + len(captureMarker)
+		content = content[:insertAt] + "\n" + bullet + content[insertAt:]
+	} else {
+		if !strings.HasSuffix(content, "\n") {
+			content += "\n"
+		}
+		content += bullet + "\n"
+	}
+
+	return os.WriteFile(path, []byte(content), 0644)
+}
+
 func ordinal(n int) string {
 	suffix := "th"
 	switch {

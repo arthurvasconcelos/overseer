@@ -19,7 +19,10 @@ var dailyCmd = &cobra.Command{
 	RunE:  runDaily,
 }
 
+var dailyCopy bool
+
 func init() {
+	dailyCmd.Flags().BoolVar(&dailyCopy, "copy", false, "Copy output to clipboard (macOS)")
 	rootCmd.AddCommand(dailyCmd)
 }
 
@@ -73,6 +76,7 @@ func runDaily(_ *cobra.Command, _ []string) error {
 	}
 
 	// Run all tasks in parallel, preserving order in results.
+	stopSpinner := tui.StartSpinner("loading daily briefing…")
 	results := make([]section, len(tasks))
 	var wg sync.WaitGroup
 	for i, t := range tasks {
@@ -86,14 +90,22 @@ func runDaily(_ *cobra.Command, _ []string) error {
 		}()
 	}
 	wg.Wait()
+	stopSpinner()
 
-	// Print in original order.
+	// Collect output in order, then print (and optionally copy).
+	var body bytes.Buffer
 	for i, t := range tasks {
 		if results[i].err != nil {
-			fmt.Println(tui.WarnLine(t.label, results[i].err.Error()))
-			fmt.Println()
+			body.WriteString(tui.WarnLine(t.label, results[i].err.Error()) + "\n\n")
 		} else {
-			fmt.Print(results[i].buf.String())
+			body.Write(results[i].buf.Bytes())
+		}
+	}
+	fmt.Print(body.String())
+
+	if dailyCopy {
+		if err := copyToClipboard(body.String()); err != nil {
+			fmt.Println(tui.WarnLine("copy", err.Error()))
 		}
 	}
 

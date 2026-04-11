@@ -35,10 +35,21 @@ var noteSearchCmd = &cobra.Command{
 	RunE:  runNoteSearch,
 }
 
+var noteAppendCmd = &cobra.Command{
+	Use:   "append <text>",
+	Short: "Append a timestamped bullet to today's daily note",
+	Long: `Appends "- HH:MM — <text>" immediately after the <!-- overseer:capture -->
+marker in today's daily note. If the marker is absent the bullet is appended
+at the end of the file. The note must already exist (run: overseer note daily).`,
+	Args: cobra.ExactArgs(1),
+	RunE: runNoteAppend,
+}
+
 func init() {
 	noteCmd.AddCommand(noteDailyCmd)
 	noteCmd.AddCommand(noteNewCmd)
 	noteCmd.AddCommand(noteSearchCmd)
+	noteCmd.AddCommand(noteAppendCmd)
 	rootCmd.AddCommand(noteCmd)
 }
 
@@ -60,6 +71,33 @@ func vaultFromConfig(cfg *config.Config) (*obsidianpkg.Vault, error) {
 func vaultBasename(path string) string {
 	parts := strings.Split(strings.TrimRight(path, "/"), "/")
 	return parts[len(parts)-1]
+}
+
+// --- append ---
+
+func runNoteAppend(_ *cobra.Command, args []string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	vault, err := vaultFromConfig(cfg)
+	if err != nil {
+		return err
+	}
+
+	folder := cfg.Obsidian.DailyNotesFolder
+	filename := obsidianpkg.DailyFilename()
+
+	if !vault.NoteExists(folder, filename) {
+		return fmt.Errorf("today's daily note does not exist — run: overseer note daily")
+	}
+
+	if err := vault.AppendToDaily(folder, args[0]); err != nil {
+		return err
+	}
+
+	fmt.Println(tui.StyleOK.Render("✓") + "  appended to " + tui.StyleAccent.Render(filename))
+	return nil
 }
 
 // --- daily ---

@@ -93,7 +93,11 @@ func printGCal(ctx context.Context, account config.GoogleAccount, w *bytes.Buffe
 		} else {
 			timeCol = tui.StyleAccent.Render(e.Start.Format("15:04") + " – " + e.End.Format("15:04"))
 		}
-		fmt.Fprintf(w, "  %s  %s\n", timeCol, tui.StyleNormal.Render(e.Title))
+		title := tui.StyleNormal.Render(e.Title)
+		if e.JoinURL != "" {
+			title += "  " + tui.StyleAccent.Render(tui.Hyperlink(e.JoinURL, "[Join]"))
+		}
+		fmt.Fprintf(w, "  %s  %s\n", timeCol, title)
 	}
 	fmt.Fprintln(w)
 

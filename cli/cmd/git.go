@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -29,11 +30,108 @@ const (
 
 var gitSetupGlobal bool
 
+var gitBranchCmd = &cobra.Command{
+	Use:   "branch",
+	Short: "Show the active git identity for the current repo and branch",
+	RunE:  runGitBranch,
+}
+
 func init() {
 	gitSetupCmd.Flags().BoolVar(&gitSetupGlobal, "global", false, "Apply profile to global git config instead of local repo")
 	gitCmd.AddCommand(gitSetupCmd)
+	gitCmd.AddCommand(gitBranchCmd)
 	gitCmd.AddCommand(profileCmd)
 	rootCmd.AddCommand(gitCmd)
+}
+
+func runGitBranch(_ *cobra.Command, _ []string) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	if !isGitRepo(cwd) {
+		return fmt.Errorf("not a git repository: %s", cwd)
+	}
+
+	branch, err := gitIn(cwd, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return fmt.Errorf("reading branch: %w", err)
+	}
+	branch = strings.TrimSpace(branch)
+
+	localEmail, _ := gitConfigGetIn(cwd, "--local", "user.email")
+	localName, _ := gitConfigGetIn(cwd, "--local", "user.name")
+	localSignKey, _ := gitConfigGetIn(cwd, "--local", "user.signingkey")
+	localGPGSign, _ := gitConfigGetIn(cwd, "--local", "commit.gpgsign")
+	localGPGFmt, _ := gitConfigGetIn(cwd, "--local", "gpg.format")
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	var matchedProfile string
+	for _, p := range cfg.Git.Profiles {
+		if p.Email != "" && p.Email == localEmail {
+			matchedProfile = p.Name
+			break
+		}
+	}
+
+	type branchJSON struct {
+		Branch     string `json:"branch"`
+		Profile    string `json:"profile,omitempty"`
+		Email      string `json:"email,omitempty"`
+		Name       string `json:"name,omitempty"`
+		GPGSign    bool   `json:"gpg_sign"`
+		GPGFormat  string `json:"gpg_format,omitempty"`
+		SigningKey  string `json:"signing_key,omitempty"`
+	}
+
+	if outputFormat == "json" {
+		return printJSON(branchJSON{
+			Branch:    branch,
+			Profile:   matchedProfile,
+			Email:     localEmail,
+			Name:      localName,
+			GPGSign:   localGPGSign == "true",
+			GPGFormat: localGPGFmt,
+			SigningKey: localSignKey,
+		})
+	}
+
+	fmt.Println(tui.SectionHeader("git branch", branch))
+	fmt.Println()
+
+	profileLabel := tui.StyleMuted.Render("(no match)")
+	if matchedProfile != "" {
+		profileLabel = tui.StyleAccent.Render(matchedProfile)
+	}
+	fmt.Printf("  %s  %s\n", tui.StyleDim.Render("profile   "), profileLabel)
+
+	if localEmail != "" {
+		fmt.Printf("  %s  %s\n", tui.StyleDim.Render("email     "), tui.StyleNormal.Render(localEmail))
+	}
+	if localName != "" {
+		fmt.Printf("  %s  %s\n", tui.StyleDim.Render("name      "), tui.StyleNormal.Render(localName))
+	}
+
+	gpgSign := tui.StyleMuted.Render("off")
+	if localGPGSign == "true" {
+		gpgFmt := localGPGFmt
+		if gpgFmt == "" {
+			gpgFmt = coalesce(cfg.Git.Defaults.GPGFormat, "openpgp")
+		}
+		gpgSign = tui.StyleOK.Render("✓") + " " + tui.StyleMuted.Render(gpgFmt)
+	}
+	fmt.Printf("  %s  %s\n", tui.StyleDim.Render("gpg sign  "), gpgSign)
+
+	if localSignKey != "" {
+		fmt.Printf("  %s  %s\n", tui.StyleDim.Render("signing key"), tui.StyleMuted.Render(localSignKey))
+	}
+
+	fmt.Println()
+	return nil
 }
 
 func runGitSetup(_ *cobra.Command, _ []string) error {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -37,11 +38,124 @@ var reposSetupCmd = &cobra.Command{
 	RunE:  runReposSetup,
 }
 
+var reposOpenCmd = &cobra.Command{
+	Use:   "open [name]",
+	Short: "Open a managed repo in browser, Finder, or IDE",
+	Args:  cobra.MaximumNArgs(1),
+	RunE:  runReposOpen,
+}
+
+var (
+	reposOpenBrowser bool
+	reposOpenFinder  bool
+	reposOpenIDE     bool
+)
+
+// sshRemoteRe matches SSH-format git remotes: git@host:path.git
+var sshRemoteRe = regexp.MustCompile(`^git@([^:]+):(.+?)(?:\.git)?$`)
+
 func init() {
+	reposOpenCmd.Flags().BoolVar(&reposOpenBrowser, "browser", false, "Open repo URL in browser (default)")
+	reposOpenCmd.Flags().BoolVar(&reposOpenFinder, "finder", false, "Reveal local path in Finder")
+	reposOpenCmd.Flags().BoolVar(&reposOpenIDE, "ide", false, "Open local path in IDE")
 	reposCmd.AddCommand(reposStatusCmd)
 	reposCmd.AddCommand(reposPullCmd)
 	reposCmd.AddCommand(reposSetupCmd)
+	reposCmd.AddCommand(reposOpenCmd)
 	rootCmd.AddCommand(reposCmd)
+}
+
+// --- open ---
+
+func runReposOpen(_ *cobra.Command, args []string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	if len(cfg.Repos) == 0 {
+		fmt.Println(tui.StyleMuted.Render("no repos configured — add entries under repos: in config.yaml"))
+		return nil
+	}
+
+	// Pick repo: from arg or interactive selector.
+	var repo config.RepoConfig
+	if len(args) > 0 {
+		name := args[0]
+		found := false
+		for _, r := range cfg.Repos {
+			if r.Name == name {
+				repo = r
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("no repo named %q", name)
+		}
+	} else {
+		items := make([]tui.SelectItem, len(cfg.Repos))
+		for i, r := range cfg.Repos {
+			items[i] = tui.SelectItem{Title: r.Name, Subtitle: r.Path}
+		}
+		idx, err := tui.Select("select repo", items)
+		if err != nil {
+			return err
+		}
+		if idx == -1 {
+			return nil
+		}
+		repo = cfg.Repos[idx]
+	}
+
+	home := resolveReposPath(cfg)
+	localPath := repoRoot(home, repo.Path)
+
+	// Default to --browser if no flag is set.
+	if !reposOpenBrowser && !reposOpenFinder && !reposOpenIDE {
+		reposOpenBrowser = true
+	}
+
+	if reposOpenBrowser {
+		browserURL := repoToHTTPS(repo.URL)
+		if browserURL == "" {
+			return fmt.Errorf("could not derive browser URL from remote: %s", repo.URL)
+		}
+		fmt.Println(tui.StyleMuted.Render("opening ") + tui.StyleAccent.Render(browserURL))
+		return exec.Command("open", browserURL).Run()
+	}
+
+	if reposOpenFinder {
+		fmt.Println(tui.StyleMuted.Render("revealing in Finder: ") + tui.StyleAccent.Render(localPath))
+		return exec.Command("open", "-R", localPath).Run()
+	}
+
+	if reposOpenIDE {
+		ide := repo.IDE
+		if ide == "" {
+			ide = cfg.System.IDE
+		}
+		if ide == "" {
+			return fmt.Errorf("no IDE configured — set system.ide in config.local.yaml or repos[%s].ide", repo.Name)
+		}
+		fmt.Println(tui.StyleMuted.Render("opening in "+ide+": ") + tui.StyleAccent.Render(localPath))
+		return exec.Command(ide, localPath).Run()
+	}
+
+	return nil
+}
+
+// repoToHTTPS converts a git remote URL (SSH or HTTPS) to an HTTPS browser URL.
+// git@github.com:owner/repo.git → https://github.com/owner/repo
+// https://github.com/owner/repo.git → https://github.com/owner/repo
+func repoToHTTPS(remote string) string {
+	remote = strings.TrimSuffix(remote, ".git")
+	if m := sshRemoteRe.FindStringSubmatch(remote); len(m) == 3 {
+		return "https://" + m[1] + "/" + m[2]
+	}
+	if strings.HasPrefix(remote, "https://") || strings.HasPrefix(remote, "http://") {
+		return remote
+	}
+	return ""
 }
 
 // repoRoot returns the absolute path for a repo given the overseer home dir.

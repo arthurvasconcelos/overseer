@@ -11,14 +11,42 @@ import (
 
 const defaultBaseURL = "https://gitlab.com"
 
+// pipelineCIStatus maps a GitLab pipeline status string to CIStatus.
+func pipelineCIStatus(p *struct{ Status string `json:"status"` }) CIStatus {
+	if p == nil || p.Status == "" {
+		return CINone
+	}
+	switch p.Status {
+	case "success":
+		return CIPass
+	case "failed":
+		return CIFail
+	case "running", "pending", "created", "preparing", "waiting_for_resource", "scheduled":
+		return CIRunning
+	default:
+		return CINone
+	}
+}
+
+// CIStatus is the summarized CI pipeline status for an MR.
+type CIStatus string
+
+const (
+	CIPass    CIStatus = "pass"
+	CIFail    CIStatus = "fail"
+	CIRunning CIStatus = "running"
+	CINone    CIStatus = ""
+)
+
 // MR is a minimal representation of a GitLab merge request.
 type MR struct {
-	IID     int    `json:"iid"`     // merge request IID within the project
-	Title   string `json:"title"`
-	Project string `json:"project"` // "namespace/project"
-	URL     string `json:"url"`
-	Draft   bool   `json:"draft"`
-	Status  string `json:"status"` // "can_be_merged", "cannot_be_merged", "checking", ""
+	IID     int      `json:"iid"`     // merge request IID within the project
+	Title   string   `json:"title"`
+	Project string   `json:"project"` // "namespace/project"
+	URL     string   `json:"url"`
+	Draft   bool     `json:"draft"`
+	Status  string   `json:"status"` // "can_be_merged", "cannot_be_merged", "checking", ""
+	CI      CIStatus `json:"ci,omitempty"`
 }
 
 // Client is a minimal GitLab REST client.
@@ -90,6 +118,9 @@ func (c *Client) fetchMRs(ctx context.Context, scope string) ([]MR, error) {
 		Project struct {
 			PathWithNamespace string `json:"path_with_namespace"`
 		} `json:"project"`
+		HeadPipeline *struct {
+			Status string `json:"status"`
+		} `json:"head_pipeline"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
 		return nil, fmt.Errorf("gitlab: decoding response: %w", err)
@@ -109,6 +140,7 @@ func (c *Client) fetchMRs(ctx context.Context, scope string) ([]MR, error) {
 			URL:     item.WebURL,
 			Draft:   item.Draft,
 			Status:  item.MergeStatus,
+			CI:      pipelineCIStatus(item.HeadPipeline),
 		})
 	}
 	return mrs, nil

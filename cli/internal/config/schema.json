@@ -84,6 +84,10 @@
         "brain_path": {
           "description": "Absolute path to the brain directory. Overrides brain.path for this machine.",
           "type": "string"
+        },
+        "ide": {
+          "description": "Default IDE command used by `overseer repos open --ide` (e.g. \"code\", \"idea\"). Overridden per repo via repos[].ide.",
+          "type": "string"
         }
       }
     },
@@ -366,6 +370,10 @@
         },
         "git_profile": {
           "description": "Profile name from git.profiles to apply after cloning.",
+          "type": "string"
+        },
+        "ide": {
+          "description": "IDE command for this repo (e.g. \"idea\"). Overrides system.ide for `overseer repos open --ide`.",
           "type": "string"
         }
       }

@@ -23,7 +23,10 @@ var prsCmd = &cobra.Command{
 	RunE:  runPRs,
 }
 
+var prsCopy bool
+
 func init() {
+	prsCmd.Flags().BoolVar(&prsCopy, "copy", false, "Copy output to clipboard (macOS)")
 	rootCmd.AddCommand(prsCmd)
 }
 
@@ -80,6 +83,7 @@ func runPRs(_ *cobra.Command, _ []string) error {
 		return runPRsJSON(ctx, cfg)
 	}
 
+	stopSpinner := tui.StartSpinner("fetching pull requests…")
 	results := make([]section, len(tasks))
 	var wg sync.WaitGroup
 	for i, t := range tasks {
@@ -93,13 +97,22 @@ func runPRs(_ *cobra.Command, _ []string) error {
 		}()
 	}
 	wg.Wait()
+	stopSpinner()
 
+	var total bytes.Buffer
 	for i, t := range tasks {
 		if results[i].err != nil {
-			fmt.Println(tui.WarnLine(t.label, results[i].err.Error()))
-			fmt.Println()
+			line := tui.WarnLine(t.label, results[i].err.Error()) + "\n\n"
+			total.WriteString(line)
 		} else {
-			fmt.Print(results[i].buf.String())
+			total.Write(results[i].buf.Bytes())
+		}
+	}
+	fmt.Print(total.String())
+
+	if prsCopy {
+		if err := copyToClipboard(total.String()); err != nil {
+			fmt.Println(tui.WarnLine("copy", err.Error()))
 		}
 	}
 	return nil
@@ -218,9 +231,10 @@ func printGitHubPRs(ctx context.Context, inst config.GitHubInstance, w *bytes.Bu
 		fmt.Fprintln(w, "  "+tui.StyleMuted.Render("no open pull requests"))
 	}
 	for _, pr := range prs {
-		fmt.Fprintf(w, "  %s  %s  %s\n",
+		fmt.Fprintf(w, "  %s  %s  %s  %s\n",
 			tui.StyleDim.Render(fmt.Sprintf("%-35s", pr.Repo)),
 			prBadge(pr.Draft, ""),
+			ciBadge(string(pr.CI)),
 			tui.StyleNormal.Render(fmt.Sprintf("#%-4d %s", pr.Number, pr.Title)),
 		)
 	}
@@ -246,14 +260,29 @@ func printGitLabMRs(ctx context.Context, inst config.GitLabInstance, w *bytes.Bu
 		fmt.Fprintln(w, "  "+tui.StyleMuted.Render("no open merge requests"))
 	}
 	for _, mr := range mrs {
-		fmt.Fprintf(w, "  %s  %s  %s\n",
+		fmt.Fprintf(w, "  %s  %s  %s  %s\n",
 			tui.StyleDim.Render(fmt.Sprintf("%-35s", mr.Project)),
 			prBadge(mr.Draft, mr.Status),
+			ciBadge(string(mr.CI)),
 			tui.StyleNormal.Render(fmt.Sprintf("!%-4d %s", mr.IID, mr.Title)),
 		)
 	}
 	fmt.Fprintln(w)
 	return nil
+}
+
+// ciBadge returns a coloured CI status badge.
+func ciBadge(status string) string {
+	switch status {
+	case "pass":
+		return tui.StyleOK.Render("✓ ci   ")
+	case "fail":
+		return tui.StyleError.Render("✗ ci   ")
+	case "running":
+		return tui.StyleWarn.Render("⟳ ci   ")
+	default:
+		return tui.StyleMuted.Render("— ci   ")
+	}
 }
 
 // prBadge returns a coloured status badge for a PR/MR.

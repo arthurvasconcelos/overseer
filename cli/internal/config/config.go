@@ -55,6 +55,7 @@ type RepoConfig struct {
 	Path       string `mapstructure:"path"        json:"path"`                  // relative to OVERSEER_HOME
 	Readonly   bool   `mapstructure:"readonly"    json:"readonly,omitempty"`    // skip push, warn on local changes
 	GitProfile string `mapstructure:"git_profile" json:"git_profile,omitempty"` // profile name from git.profiles to apply after clone
+	IDE        string `mapstructure:"ide"         json:"ide,omitempty"`         // per-repo IDE override (e.g. "idea"); falls back to system.ide
 }
 
 // SecretsConfig holds 1Password-related settings.
@@ -132,6 +133,7 @@ type SystemConfig struct {
 	GPGSSHProgram string `mapstructure:"gpg_ssh_program" json:"gpg_ssh_program,omitempty"`
 	ReposPath     string `mapstructure:"repos_path"      json:"repos_path,omitempty"`
 	BrainPath     string `mapstructure:"brain_path"      json:"brain_path,omitempty"`
+	IDE           string `mapstructure:"ide"             json:"ide,omitempty"` // default IDE command (e.g. "code", "idea")
 }
 
 // GitConfig holds git identity profiles and shared defaults.

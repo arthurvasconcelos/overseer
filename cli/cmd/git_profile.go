@@ -480,7 +480,16 @@ func isGitRepo(dir string) bool {
 // gitConfigGet reads a single git config value at the given scope flag (e.g. "--global").
 // Returns empty string and no error if the key is unset.
 func gitConfigGet(scopeFlag, key string) (string, error) {
+	return gitConfigGetIn("", scopeFlag, key)
+}
+
+// gitConfigGetIn reads a single git config value from a specific directory.
+// Returns empty string and no error if the key is unset.
+func gitConfigGetIn(dir, scopeFlag, key string) (string, error) {
 	cmd := exec.Command("git", "config", scopeFlag, key)
+	if dir != "" {
+		cmd.Dir = dir
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		return "", nil // unset is not an error

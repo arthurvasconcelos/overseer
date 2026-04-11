@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -15,13 +16,18 @@ import (
 	"google.golang.org/api/option"
 )
 
+// joinURLRe matches Zoom, Google Meet, and Microsoft Teams URLs in plain text.
+var joinURLRe = regexp.MustCompile(
+	`https?://(?:[a-zA-Z0-9-]+\.)?(?:zoom\.us/j|meet\.google\.com|teams\.microsoft\.com/l/meetup-join)/[^\s<>"]+`,
+)
+
 // Event is a minimal representation of a calendar event.
 type Event struct {
-	Title    string
-	Start    time.Time
-	End      time.Time
-	Location string
-	AllDay   bool
+	Title   string
+	Start   time.Time
+	End     time.Time
+	AllDay  bool
+	JoinURL string // video conference join link, if available
 }
 
 // tokenPath returns the local path where the OAuth token for a named account
@@ -111,10 +117,7 @@ func (c *Client) TodaysEvents(ctx context.Context) ([]Event, error) {
 
 	var events []Event
 	for _, item := range result.Items {
-		e := Event{
-			Title:    item.Summary,
-			Location: item.Location,
-		}
+		e := Event{Title: item.Summary}
 		if item.Start.DateTime != "" {
 			e.Start, _ = time.Parse(time.RFC3339, item.Start.DateTime)
 			e.End, _ = time.Parse(time.RFC3339, item.End.DateTime)
@@ -122,9 +125,28 @@ func (c *Client) TodaysEvents(ctx context.Context) ([]Event, error) {
 			e.AllDay = true
 			e.Start, _ = time.Parse("2006-01-02", item.Start.Date)
 		}
+		e.JoinURL = extractJoinURL(item)
 		events = append(events, e)
 	}
 	return events, nil
+}
+
+// extractJoinURL returns a video conference join URL for a calendar event.
+// Prefers conferenceData entry points; falls back to a regex over the description.
+func extractJoinURL(item *googlecalendar.Event) string {
+	if item.ConferenceData != nil {
+		for _, ep := range item.ConferenceData.EntryPoints {
+			if ep.EntryPointType == "video" && ep.Uri != "" {
+				return ep.Uri
+			}
+		}
+	}
+	if item.Description != "" {
+		if m := joinURLRe.FindString(item.Description); m != "" {
+			return m
+		}
+	}
+	return ""
 }
 
 func httpClientFromConfig(ctx context.Context, cfg *oauth2.Config, accountName string) (*http.Client, error) {
