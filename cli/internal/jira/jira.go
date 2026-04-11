@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -73,6 +74,65 @@ func (c *Client) Ping(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("jira: ping: decoding response: %w", err)
 	}
 	return user.EmailAddress, nil
+}
+
+// RecentlyUpdated returns issues whose status transitioned to any of the given
+// statuses since the provided time. Used by the standup generator.
+func (c *Client) RecentlyUpdated(ctx context.Context, statuses []string, since time.Time) ([]Issue, error) {
+	sinceStr := since.Format("2006/01/02 15:04")
+	statusList := make([]string, len(statuses))
+	for i, s := range statuses {
+		statusList[i] = fmt.Sprintf("%q", s)
+	}
+	jql := fmt.Sprintf(
+		`assignee = currentUser() AND status in (%s) AND updated >= "%s" ORDER BY updated DESC`,
+		strings.Join(statusList, ", "),
+		sinceStr,
+	)
+
+	body, err := json.Marshal(map[string]any{
+		"jql":        jql,
+		"fields":     []string{"summary", "status", "priority"},
+		"maxResults": 30,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		c.baseURL+"/rest/api/3/search/jql", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.SetBasicAuth(c.email, c.token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("jira request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("jira: unexpected status %s", resp.Status)
+	}
+
+	var result searchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("jira: decoding response: %w", err)
+	}
+
+	issues := make([]Issue, 0, len(result.Issues))
+	for _, i := range result.Issues {
+		issues = append(issues, Issue{
+			Key:      i.Key,
+			Summary:  i.Fields.Summary,
+			Status:   i.Fields.Status.Name,
+			Priority: i.Fields.Priority.Name,
+		})
+	}
+	return issues, nil
 }
 
 // MyIssues returns unresolved issues assigned to the current user.

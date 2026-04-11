@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
+	"github.com/arthurvasconcelos/overseer/internal/notify"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -45,6 +46,13 @@ var reposOpenCmd = &cobra.Command{
 	RunE:  runReposOpen,
 }
 
+var reposSearchCmd = &cobra.Command{
+	Use:   "search <query>",
+	Short: "Full-text search across all managed repos (git grep)",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runReposSearch,
+}
+
 var (
 	reposOpenBrowser bool
 	reposOpenFinder  bool
@@ -62,7 +70,79 @@ func init() {
 	reposCmd.AddCommand(reposPullCmd)
 	reposCmd.AddCommand(reposSetupCmd)
 	reposCmd.AddCommand(reposOpenCmd)
+	reposCmd.AddCommand(reposSearchCmd)
 	rootCmd.AddCommand(reposCmd)
+}
+
+// --- search ---
+
+type reposSearchMatch struct {
+	Repo string `json:"repo"`
+	File string `json:"file"`
+	Line int    `json:"line"`
+	Text string `json:"text"`
+}
+
+func runReposSearch(_ *cobra.Command, args []string) error {
+	query := args[0]
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	if len(cfg.Repos) == 0 {
+		if outputFormat == "json" {
+			return printJSON([]reposSearchMatch{})
+		}
+		fmt.Println(tui.StyleMuted.Render("no repos configured"))
+		return nil
+	}
+
+	home := resolveReposPath(cfg)
+	var allMatches []reposSearchMatch
+
+	for _, repo := range cfg.Repos {
+		path := repoRoot(home, repo)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			continue
+		}
+		out, _ := gitIn(path, "grep", "-n", "--", query)
+		for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+			if line == "" {
+				continue
+			}
+			// git grep -n output: file:linenum:text
+			parts := strings.SplitN(line, ":", 3)
+			if len(parts) < 3 {
+				continue
+			}
+			lineNum := 0
+			fmt.Sscanf(parts[1], "%d", &lineNum)
+			allMatches = append(allMatches, reposSearchMatch{
+				Repo: repo.Name,
+				File: parts[0],
+				Line: lineNum,
+				Text: parts[2],
+			})
+		}
+	}
+
+	if outputFormat == "json" {
+		if allMatches == nil {
+			allMatches = []reposSearchMatch{}
+		}
+		return printJSON(allMatches)
+	}
+
+	if len(allMatches) == 0 {
+		fmt.Println(tui.StyleMuted.Render("no matches found"))
+		return nil
+	}
+	for _, m := range allMatches {
+		repo := tui.StyleAccent.Render(m.Repo)
+		file := tui.StyleMuted.Render(fmt.Sprintf("%s:%d", m.File, m.Line))
+		fmt.Printf("  %s  %s  %s\n", repo, file, tui.StyleNormal.Render(m.Text))
+	}
+	return nil
 }
 
 // --- open ---
@@ -108,7 +188,7 @@ func runReposOpen(_ *cobra.Command, args []string) error {
 	}
 
 	home := resolveReposPath(cfg)
-	localPath := repoRoot(home, repo.Path)
+	localPath := repoRoot(home, repo)
 
 	// Default to --browser if no flag is set.
 	if !reposOpenBrowser && !reposOpenFinder && !reposOpenIDE {
@@ -158,12 +238,31 @@ func repoToHTTPS(remote string) string {
 	return ""
 }
 
-// repoRoot returns the absolute path for a repo given the overseer home dir.
-func repoRoot(overseerHome, repoPath string) string {
-	if filepath.IsAbs(repoPath) {
-		return repoPath
+// resolvePath returns the absolute path for an arbitrary string path:
+// absolute paths are returned as-is; relative paths are joined with home.
+func resolvePath(home, path string) string {
+	if filepath.IsAbs(path) {
+		return path
 	}
-	return filepath.Join(overseerHome, repoPath)
+	return filepath.Join(home, path)
+}
+
+// repoRoot returns the absolute local path for a repo.
+// Resolution order:
+//  1. repo.Path (absolute, or relative to reposHome) — full override
+//  2. repo.Folder + repo.Name           — reposHome/folder/name
+//  3. repo.Name only                    — reposHome/name
+func repoRoot(reposHome string, repo config.RepoConfig) string {
+	if repo.Path != "" {
+		if filepath.IsAbs(repo.Path) {
+			return repo.Path
+		}
+		return filepath.Join(reposHome, repo.Path)
+	}
+	if repo.Folder != "" {
+		return filepath.Join(reposHome, repo.Folder, repo.Name)
+	}
+	return filepath.Join(reposHome, repo.Name)
 }
 
 // resolveReposPath returns the overseer repo root using this precedence:
@@ -233,7 +332,7 @@ func runReposStatus(_ *cobra.Command, _ []string) error {
 	if outputFormat == "json" {
 		out := make([]repoStatusJSON, len(cfg.Repos))
 		for i, repo := range cfg.Repos {
-			path := repoRoot(home, repo.Path)
+			path := repoRoot(home, repo)
 			r := results[i]
 			s := repoStatusJSON{
 				Name:     repo.Name,
@@ -312,6 +411,11 @@ func runReposPull(_ *cobra.Command, _ []string) error {
 			fmt.Print(r.output)
 		}
 	}
+
+	if cfg.System.Notifications {
+		_ = notify.Send("overseer repos", "Pull complete", "")
+	}
+
 	return nil
 }
 
@@ -330,7 +434,7 @@ func runReposSetup(_ *cobra.Command, _ []string) error {
 		if repo.GitProfile == "" {
 			continue
 		}
-		path := repoRoot(home, repo.Path)
+		path := repoRoot(home, repo)
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			fmt.Printf("%s: not cloned — skipping\n", repo.Name)
 			continue
@@ -344,7 +448,7 @@ func runReposSetup(_ *cobra.Command, _ []string) error {
 }
 
 func repoStatus(home string, repo config.RepoConfig) repoResult {
-	path := repoRoot(home, repo.Path)
+	path := repoRoot(home, repo)
 	var sb strings.Builder
 
 	badge := ""
@@ -374,7 +478,7 @@ func repoStatus(home string, repo config.RepoConfig) repoResult {
 }
 
 func repoPull(home string, repo config.RepoConfig, cfg *config.Config) repoResult {
-	path := repoRoot(home, repo.Path)
+	path := repoRoot(home, repo)
 	var sb strings.Builder
 
 	badge := ""

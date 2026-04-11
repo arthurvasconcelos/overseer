@@ -59,7 +59,7 @@ func vaultFromConfig(cfg *config.Config) (*obsidianpkg.Vault, error) {
 	if ocfg.VaultPath == "" {
 		return nil, fmt.Errorf("obsidian.vault_path not configured — add it to config.yaml")
 	}
-	path := repoRoot(resolveReposPath(cfg), ocfg.VaultPath)
+	path := resolvePath(resolveReposPath(cfg), ocfg.VaultPath)
 	name := ocfg.VaultName
 	if name == "" {
 		// Fall back to directory basename.

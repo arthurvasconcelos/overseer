@@ -9,6 +9,7 @@ import (
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/nativeplugin"
+	"github.com/arthurvasconcelos/overseer/internal/notify"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -107,6 +108,10 @@ func runDaily(_ *cobra.Command, _ []string) error {
 		if err := copyToClipboard(body.String()); err != nil {
 			fmt.Println(tui.WarnLine("copy", err.Error()))
 		}
+	}
+
+	if cfg.System.Notifications {
+		_ = notify.Send("overseer daily", "Morning briefing ready", "")
 	}
 
 	return nil

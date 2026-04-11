@@ -1,4 +1,5 @@
 from overseer_sdk.context import PluginContext
+from overseer_sdk.notify import notify
 from overseer_sdk.styles import (
     STYLE_ACCENT,
     STYLE_DIM,
@@ -14,6 +15,7 @@ from overseer_sdk.styles import (
 
 __all__ = [
     "PluginContext",
+    "notify",
     "STYLE_HEADER",
     "STYLE_ACCENT",
     "STYLE_OK",

@@ -84,6 +84,15 @@ func (c *Client) Mentions() ([]Mention, error) {
 	return mentions, nil
 }
 
+// Send posts a message to a channel or DM in the workspace.
+func (c *Client) Send(channel, text string) error {
+	_, _, err := c.api.PostMessage(channel, slack.MsgOptionText(text, false))
+	if err != nil {
+		return fmt.Errorf("slack: send: %w", err)
+	}
+	return nil
+}
+
 func truncate(s string, max int) string {
 	if len(s) <= max {
 		return s

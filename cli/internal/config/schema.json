@@ -88,6 +88,10 @@
         "ide": {
           "description": "Default IDE command used by `overseer repos open --ide` (e.g. \"code\", \"idea\"). Overridden per repo via repos[].ide.",
           "type": "string"
+        },
+        "notifications": {
+          "description": "When true, fire native desktop notifications when long-running commands (daily, standup, repos pull) complete.",
+          "type": "boolean"
         }
       }
     },
@@ -242,6 +246,10 @@
         "op_account": {
           "description": "1Password account ID to use when resolving op:// references.",
           "type": "string"
+        },
+        "show_issues": {
+          "description": "When true, open GitHub Issues assigned to the user are surfaced in overseer daily.",
+          "type": "boolean"
         }
       }
     },
@@ -350,18 +358,22 @@
       "description": "A git repository managed by overseer.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "url", "path"],
+      "required": ["name", "url"],
       "properties": {
         "name": {
-          "description": "Display name for this repo.",
+          "description": "Display name for this repo. Used as the clone directory name when folder is set.",
           "type": "string"
         },
         "url": {
           "description": "Git remote URL used for cloning.",
           "type": "string"
         },
+        "folder": {
+          "description": "Subdirectory under system.repos_path where this repo is cloned. Clone target becomes repos_path/folder/name. Ignored when path is set.",
+          "type": "string"
+        },
         "path": {
-          "description": "Clone destination, relative to system.repos_path (or absolute).",
+          "description": "Full clone destination override, relative to system.repos_path (or absolute). Takes precedence over folder.",
           "type": "string"
         },
         "readonly": {

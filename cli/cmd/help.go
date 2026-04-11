@@ -23,10 +23,10 @@ type cmdGroup struct {
 // Any command not listed here and without an annotation falls through to an "Other" section.
 var rootGroups = []cmdGroup{
 	{"Setup", []string{"setup", "brain", "brew"}},
-	{"Daily", []string{"daily", "prs", "note", "status"}},
+	{"Daily", []string{"daily", "standup", "prs", "note", "status"}},
 	{"Dev", []string{"run", "repos", "git"}},
 	{"AI", []string{"context", "mcp"}},
-	{"System", []string{"accounts", "config", "plugins", "update", "completion"}},
+	{"System", []string{"accounts", "config", "plugins", "notify", "update", "completion"}},
 }
 
 func styledHelp(cmd *cobra.Command, _ []string) {

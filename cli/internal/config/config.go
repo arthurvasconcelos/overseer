@@ -52,7 +52,8 @@ type Config struct {
 type RepoConfig struct {
 	Name       string `mapstructure:"name"        json:"name"`
 	URL        string `mapstructure:"url"         json:"url"`
-	Path       string `mapstructure:"path"        json:"path"`                  // relative to OVERSEER_HOME
+	Folder     string `mapstructure:"folder"      json:"folder,omitempty"`      // subdirectory under repos_path; clone target is repos_path/folder/name
+	Path       string `mapstructure:"path"        json:"path,omitempty"`        // full path override (absolute or relative to repos_path); takes precedence over folder
 	Readonly   bool   `mapstructure:"readonly"    json:"readonly,omitempty"`    // skip push, warn on local changes
 	GitProfile string `mapstructure:"git_profile" json:"git_profile,omitempty"` // profile name from git.profiles to apply after clone
 	IDE        string `mapstructure:"ide"         json:"ide,omitempty"`         // per-repo IDE override (e.g. "idea"); falls back to system.ide
@@ -75,9 +76,10 @@ type IntegrationsConfig struct {
 // GitHubInstance configures a single GitHub account.
 // Token is an op:// reference to a Personal Access Token.
 type GitHubInstance struct {
-	Name      string `mapstructure:"name"       json:"name"`
-	Token     string `mapstructure:"token"      json:"token"`                // op:// reference
-	OPAccount string `mapstructure:"op_account" json:"op_account,omitempty"` // optional 1Password account ID
+	Name       string `mapstructure:"name"        json:"name"`
+	Token      string `mapstructure:"token"       json:"token"`                 // op:// reference
+	OPAccount  string `mapstructure:"op_account"  json:"op_account,omitempty"`  // optional 1Password account ID
+	ShowIssues bool   `mapstructure:"show_issues" json:"show_issues,omitempty"` // surface assigned Issues in daily briefing
 }
 
 // GitLabInstance configures a single GitLab instance.
@@ -133,7 +135,8 @@ type SystemConfig struct {
 	GPGSSHProgram string `mapstructure:"gpg_ssh_program" json:"gpg_ssh_program,omitempty"`
 	ReposPath     string `mapstructure:"repos_path"      json:"repos_path,omitempty"`
 	BrainPath     string `mapstructure:"brain_path"      json:"brain_path,omitempty"`
-	IDE           string `mapstructure:"ide"             json:"ide,omitempty"` // default IDE command (e.g. "code", "idea")
+	IDE           string `mapstructure:"ide"             json:"ide,omitempty"`           // default IDE command (e.g. "code", "idea")
+	Notifications bool   `mapstructure:"notifications"   json:"notifications,omitempty"` // fire native desktop notifications on long-running commands
 }
 
 // GitConfig holds git identity profiles and shared defaults.
