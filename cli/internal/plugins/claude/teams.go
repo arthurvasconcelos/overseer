@@ -24,6 +24,7 @@ import (
 
 // teamMeta is the parsed content of brain/claude/teams/<slug>/team.yaml.
 type teamMeta struct {
+	Slug        string   `yaml:"-"`              // directory name under teamsRoot; set programmatically
 	Name        string   `yaml:"name"`
 	Description string   `yaml:"description"`
 	Lead        string   `yaml:"lead,omitempty"` // who the personas are advising, e.g. "Arthur, Tech Lead"
@@ -68,6 +69,7 @@ func listTeamMetas(cfg *config.Config) ([]teamMeta, error) {
 		if err := yaml.Unmarshal(data, &m); err != nil {
 			continue
 		}
+		m.Slug = e.Name()
 		if m.Name == "" {
 			m.Name = e.Name()
 		}
@@ -119,14 +121,21 @@ func personaDisplayName(slug string) string {
 }
 
 // teamsCmd builds the `claude teams` parent command with its subcommands.
+// With no arguments it lists available teams; with a team slug it behaves as `use`.
 func teamsCmd(cfg *config.Config) *cobra.Command {
+	var copyFlag bool
 	root := &cobra.Command{
-		Use:   "teams",
+		Use:   "teams [team]",
 		Short: "Manage Claude team personas",
-		RunE: func(_ *cobra.Command, _ []string) error {
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 1 {
+				return runTeamsUse(cfg, args[0], copyFlag, cmd)
+			}
 			return runTeamsList(cfg)
 		},
 	}
+	root.Flags().BoolVar(&copyFlag, "copy", false, "Copy output to clipboard (macOS)")
 	root.AddCommand(teamsUseCmd(cfg))
 	root.AddCommand(teamsConsultCmd(cfg))
 	return root
@@ -180,11 +189,33 @@ type personaJSON struct {
 func teamsUseCmd(cfg *config.Config) *cobra.Command {
 	var copyFlag bool
 	cmd := &cobra.Command{
-		Use:   "use <team>",
-		Short: "Output team persona context blob (paste into Claude Code)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTeamsUse(cfg, args[0], copyFlag, cmd)
+		Use:   "use",
+		Short: "Pick a team interactively and output its context blob",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			metas, err := listTeamMetas(cfg)
+			if err != nil {
+				return err
+			}
+			if len(metas) == 0 {
+				fmt.Println(tui.StyleMuted.Render("no teams found — create brain/claude/teams/<name>/team.yaml"))
+				return nil
+			}
+			items := make([]tui.SelectItem, len(metas))
+			for i, m := range metas {
+				items[i] = tui.SelectItem{
+					Title:    m.Name,
+					Subtitle: tui.StyleMuted.Render(fmt.Sprintf("%d persona(s)", len(m.Personas))) + "  " + tui.StyleDim.Render(m.Description),
+				}
+			}
+			idx, err := tui.Select("Select a team", items)
+			if err != nil {
+				return err
+			}
+			if idx < 0 {
+				return nil // user cancelled
+			}
+			return runTeamsUse(cfg, metas[idx].Slug, copyFlag, cmd)
 		},
 	}
 	cmd.Flags().BoolVar(&copyFlag, "copy", false, "Copy output to clipboard (macOS)")
