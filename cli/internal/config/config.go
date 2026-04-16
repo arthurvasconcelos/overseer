@@ -66,11 +66,19 @@ type SecretsConfig struct {
 
 // IntegrationsConfig holds all third-party integration configs.
 type IntegrationsConfig struct {
-	Jira   []JiraInstance   `mapstructure:"jira"   json:"jira,omitempty"`
-	Slack  []SlackWorkspace `mapstructure:"slack"  json:"slack,omitempty"`
-	Google []GoogleAccount  `mapstructure:"google" json:"google,omitempty"`
-	GitHub []GitHubInstance `mapstructure:"github" json:"github,omitempty"`
-	GitLab []GitLabInstance `mapstructure:"gitlab" json:"gitlab,omitempty"`
+	Jira   []JiraInstance    `mapstructure:"jira"   json:"jira,omitempty"`
+	Slack  []SlackWorkspace  `mapstructure:"slack"  json:"slack,omitempty"`
+	Google []GoogleAccount   `mapstructure:"google" json:"google,omitempty"`
+	GitHub []GitHubInstance  `mapstructure:"github" json:"github,omitempty"`
+	GitLab []GitLabInstance  `mapstructure:"gitlab" json:"gitlab,omitempty"`
+	Claude *ClaudeIntegration `mapstructure:"claude" json:"claude,omitempty"`
+}
+
+// ClaudeIntegration configures Claude AI API access for team persona consultations.
+// APIKey is an op:// reference or a plain Anthropic API key.
+type ClaudeIntegration struct {
+	APIKey      string `mapstructure:"api_key"      json:"api_key,omitempty"`
+	DefaultTeam string `mapstructure:"default_team" json:"default_team,omitempty"`
 }
 
 // GitHubInstance configures a single GitHub account.

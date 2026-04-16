@@ -53,7 +53,8 @@
         "gitlab": {
           "type": "array",
           "items": { "$ref": "#/$defs/gitlabInstance" }
-        }
+        },
+        "claude": { "$ref": "#/$defs/claudeIntegration" }
       }
     },
     "git": {
@@ -339,6 +340,21 @@
         },
         "op_account": {
           "description": "1Password account ID used to resolve op:// references in this profile.",
+          "type": "string"
+        }
+      }
+    },
+    "claudeIntegration": {
+      "description": "Claude AI API integration. Used by `overseer claude teams consult` to call Claude with team persona system prompts.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "api_key": {
+          "description": "Anthropic API key. Accepts an op:// reference.",
+          "type": "string"
+        },
+        "default_team": {
+          "description": "Default team slug to use when --team is not specified.",
           "type": "string"
         }
       }
