@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/secrets"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
@@ -88,8 +89,8 @@ func runGitBranch(_ *cobra.Command, _ []string) error {
 		SigningKey  string `json:"signing_key,omitempty"`
 	}
 
-	if outputFormat == "json" {
-		return printJSON(branchJSON{
+	if output.Format == "json" {
+		return output.PrintJSON(branchJSON{
 			Branch:    branch,
 			Profile:   matchedProfile,
 			Email:     localEmail,

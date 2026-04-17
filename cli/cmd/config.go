@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
@@ -43,8 +44,8 @@ func runConfig(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	if outputFormat == "json" {
-		return printJSON(cfg)
+	if output.Format == "json" {
+		return output.PrintJSON(cfg)
 	}
 
 	localPath, err := config.LocalPath()

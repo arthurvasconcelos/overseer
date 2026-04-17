@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
@@ -76,12 +77,12 @@ func runProfileList(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	if outputFormat == "json" {
+	if output.Format == "json" {
 		profiles := cfg.Git.Profiles
 		if profiles == nil {
 			profiles = []config.GitProfile{}
 		}
-		return printJSON(profiles)
+		return output.PrintJSON(profiles)
 	}
 
 	if len(cfg.Git.Profiles) == 0 {

@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/secrets"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
@@ -51,7 +52,7 @@ func runEnvList(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	profiles := cfg.Env.Profiles
-	if outputFormat == "json" {
+	if output.Format == "json" {
 		type item struct {
 			Name string   `json:"name"`
 			Vars []string `json:"vars"`
@@ -61,7 +62,7 @@ func runEnvList(_ *cobra.Command, _ []string) error {
 			keys := envSortedKeys(p.Vars)
 			out[i] = item{Name: p.Name, Vars: keys}
 		}
-		return printJSON(out)
+		return output.PrintJSON(out)
 	}
 	if len(profiles) == 0 {
 		fmt.Println(tui.StyleMuted.Render("no env profiles configured — add env.profiles to config.yaml"))
@@ -91,7 +92,7 @@ func runEnvShow(_ *cobra.Command, args []string) error {
 		return err
 	}
 	keys := envSortedKeys(profile.Vars)
-	if outputFormat == "json" {
+	if output.Format == "json" {
 		type kv struct {
 			Key    string `json:"key"`
 			Value  string `json:"value"`
@@ -107,7 +108,7 @@ func runEnvShow(_ *cobra.Command, args []string) error {
 			}
 			out = append(out, kv{Key: k, Value: display, Secret: isSecret})
 		}
-		return printJSON(out)
+		return output.PrintJSON(out)
 	}
 	fmt.Println(tui.SectionHeader("env: "+profile.Name, ""))
 	fmt.Println()

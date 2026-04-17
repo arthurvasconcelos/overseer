@@ -1,4 +1,4 @@
-package cmd
+package slack
 
 import (
 	"encoding/json"
@@ -6,28 +6,29 @@ import (
 	"os"
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/secrets"
 	slackclient "github.com/arthurvasconcelos/overseer/internal/slack"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
 )
 
-var slackInstanceFlag string
+var instanceFlag string
 
-var slackCmd = &cobra.Command{
-	Use:   "slack",
-	Short: "Slack interactions — mentions, channels, send",
+func commands(cfg *config.Config) []*cobra.Command {
+	root := &cobra.Command{
+		Use:         "slack",
+		Short:       "Slack interactions — mentions, channels, send",
+		Annotations: map[string]string{"overseer/group": "Dev"},
+	}
+	root.PersistentFlags().StringVar(&instanceFlag, "instance", "", "Slack workspace name (auto-selects if only one configured)")
+	root.AddCommand(mentionsCmd())
+	root.AddCommand(channelsCmd())
+	root.AddCommand(sendCmd())
+	return []*cobra.Command{root}
 }
 
-func init() {
-	slackCmd.PersistentFlags().StringVar(&slackInstanceFlag, "instance", "", "Slack workspace name (auto-selects if only one configured)")
-	slackCmd.AddCommand(slackMentionsCmd())
-	slackCmd.AddCommand(slackChannelsCmd())
-	slackCmd.AddCommand(slackSendCmd())
-	rootCmd.AddCommand(slackCmd)
-}
-
-func resolveSlackWorkspace(cfg *config.Config, name string) (config.SlackWorkspace, error) {
+func resolveWorkspace(cfg *config.Config, name string) (config.SlackWorkspace, error) {
 	if len(cfg.Integrations.Slack) == 0 {
 		return config.SlackWorkspace{}, fmt.Errorf("no Slack workspaces configured")
 	}
@@ -56,7 +57,7 @@ func resolveSlackWorkspace(cfg *config.Config, name string) (config.SlackWorkspa
 	return cfg.Integrations.Slack[idx], nil
 }
 
-func buildSlackClient(ws config.SlackWorkspace) (*slackclient.Client, error) {
+func buildClient(ws config.SlackWorkspace) (*slackclient.Client, error) {
 	token, err := secrets.ReadAs(ws.Token, ws.OPAccount)
 	if err != nil {
 		return nil, fmt.Errorf("resolving token: %w", err)
@@ -64,7 +65,7 @@ func buildSlackClient(ws config.SlackWorkspace) (*slackclient.Client, error) {
 	return slackclient.New(token), nil
 }
 
-func slackMentionsCmd() *cobra.Command {
+func mentionsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "mentions",
 		Short: "Show recent messages that mention you",
@@ -73,11 +74,11 @@ func slackMentionsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			ws, err := resolveSlackWorkspace(cfg, slackInstanceFlag)
+			ws, err := resolveWorkspace(cfg, instanceFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildSlackClient(ws)
+			client, err := buildClient(ws)
 			if err != nil {
 				return err
 			}
@@ -85,8 +86,8 @@ func slackMentionsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if outputFormat == "json" {
-				return printJSON(mentions)
+			if output.Format == "json" {
+				return output.PrintJSON(mentions)
 			}
 			fmt.Println(tui.SectionHeader("Slack / "+ws.Name+" — Mentions", fmt.Sprintf("%d", len(mentions))))
 			if len(mentions) == 0 {
@@ -102,7 +103,7 @@ func slackMentionsCmd() *cobra.Command {
 	}
 }
 
-func slackChannelsCmd() *cobra.Command {
+func channelsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "channels",
 		Short: "List channels the bot is a member of",
@@ -111,11 +112,11 @@ func slackChannelsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			ws, err := resolveSlackWorkspace(cfg, slackInstanceFlag)
+			ws, err := resolveWorkspace(cfg, instanceFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildSlackClient(ws)
+			client, err := buildClient(ws)
 			if err != nil {
 				return err
 			}
@@ -123,8 +124,8 @@ func slackChannelsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if outputFormat == "json" {
-				return printJSON(channels)
+			if output.Format == "json" {
+				return output.PrintJSON(channels)
 			}
 			fmt.Println(tui.SectionHeader("Slack / "+ws.Name+" — Channels", fmt.Sprintf("%d", len(channels))))
 			if len(channels) == 0 {
@@ -143,7 +144,7 @@ func slackChannelsCmd() *cobra.Command {
 	}
 }
 
-func slackSendCmd() *cobra.Command {
+func sendCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "send <channel> <message>",
 		Short: "Post a message to a channel",
@@ -154,18 +155,18 @@ func slackSendCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			ws, err := resolveSlackWorkspace(cfg, slackInstanceFlag)
+			ws, err := resolveWorkspace(cfg, instanceFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildSlackClient(ws)
+			client, err := buildClient(ws)
 			if err != nil {
 				return err
 			}
 			if err := client.Send(channel, message); err != nil {
 				return err
 			}
-			if outputFormat == "json" {
+			if output.Format == "json" {
 				return json.NewEncoder(os.Stdout).Encode(map[string]string{"status": "sent", "channel": channel})
 			}
 			fmt.Println(tui.StyleOK.Render("✓") + "  sent to " + tui.StyleAccent.Render("#"+channel))

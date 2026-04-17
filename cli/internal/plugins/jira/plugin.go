@@ -19,6 +19,7 @@ func init() {
 		Name:         "jira",
 		Description:  "Jira issue tracking",
 		IsEnabled:    isEnabled,
+		Commands:     commands,
 		DailyItems:   dailyItems,
 		StatusChecks: statusChecks,
 	})

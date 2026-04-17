@@ -1,4 +1,4 @@
-package cmd
+package jira
 
 import (
 	"context"
@@ -12,33 +12,33 @@ import (
 	claudeaiclient "github.com/arthurvasconcelos/overseer/internal/claudeai"
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	jiraclient "github.com/arthurvasconcelos/overseer/internal/jira"
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/secrets"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
-var jiraInstanceFlag string
+var instanceFlag string
 
-var jiraCmd = &cobra.Command{
-	Use:   "jira",
-	Short: "Jira issue interactions — get, create, update, transition, worklog, breakdown",
+func commands(cfg *config.Config) []*cobra.Command {
+	root := &cobra.Command{
+		Use:         "jira",
+		Short:       "Jira issue interactions — get, create, update, transition, worklog, breakdown",
+		Annotations: map[string]string{"overseer/group": "Dev"},
+	}
+	root.PersistentFlags().StringVar(&instanceFlag, "instance", "", "Jira instance name (auto-selects if only one configured)")
+	root.AddCommand(getCmd())
+	root.AddCommand(createCmd())
+	root.AddCommand(updateCmd())
+	root.AddCommand(transitionCmd())
+	root.AddCommand(syncCmd())
+	root.AddCommand(worklogCmd())
+	root.AddCommand(breakdownCmd())
+	return []*cobra.Command{root}
 }
 
-func init() {
-	jiraCmd.PersistentFlags().StringVar(&jiraInstanceFlag, "instance", "", "Jira instance name (auto-selects if only one configured)")
-	jiraCmd.AddCommand(jiraGetCmd())
-	jiraCmd.AddCommand(jiraCreateCmd())
-	jiraCmd.AddCommand(jiraUpdateCmd())
-	jiraCmd.AddCommand(jiraTransitionCmd())
-	jiraCmd.AddCommand(jiraSyncCmd())
-	jiraCmd.AddCommand(jiraWorklogCmd())
-	jiraCmd.AddCommand(jiraBreakdownCmd())
-	rootCmd.AddCommand(jiraCmd)
-}
-
-// resolveJiraInstance picks the Jira instance matching name, or prompts if multiple exist.
-func resolveJiraInstance(cfg *config.Config, name string) (config.JiraInstance, error) {
+func resolveInstance(cfg *config.Config, name string) (config.JiraInstance, error) {
 	if len(cfg.Integrations.Jira) == 0 {
 		return config.JiraInstance{}, fmt.Errorf("no Jira instances configured")
 	}
@@ -67,8 +67,7 @@ func resolveJiraInstance(cfg *config.Config, name string) (config.JiraInstance, 
 	return cfg.Integrations.Jira[idx], nil
 }
 
-// buildJiraClient resolves secrets and returns a ready-to-use Jira REST client.
-func buildJiraClient(inst config.JiraInstance) (*jiraclient.Client, error) {
+func buildClient(inst config.JiraInstance) (*jiraclient.Client, error) {
 	email, err := secrets.ReadAs(inst.Email, inst.OPAccount)
 	if err != nil {
 		return nil, fmt.Errorf("resolving email: %w", err)
@@ -80,8 +79,9 @@ func buildJiraClient(inst config.JiraInstance) (*jiraclient.Client, error) {
 	return jiraclient.New(inst.BaseURL, email, token), nil
 }
 
-// parseWorkDuration parses "1h30m", "45m", or a plain number (minutes) into seconds.
-func parseWorkDuration(s string) (int, error) {
+// ParseWorkDuration parses "1h30m", "45m", or a plain number (minutes) into seconds.
+// Exported so focus.go can call it without duplicating the logic.
+func ParseWorkDuration(s string) (int, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return 0, fmt.Errorf("empty duration")
@@ -115,14 +115,11 @@ func parseWorkDuration(s string) (int, error) {
 	return total, nil
 }
 
-// apiCtx returns a 15-second timeout context for individual API calls.
 func apiCtx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 15*time.Second)
 }
 
-// --- style helpers ---
-
-func jiraStatusCell(status string, width int) string {
+func statusCell(status string, width int) string {
 	padded := fmt.Sprintf("%-*s", width, status)
 	switch strings.ToLower(status) {
 	case "in progress":
@@ -136,7 +133,7 @@ func jiraStatusCell(status string, width int) string {
 	}
 }
 
-func jiraPriorityCell(priority string, width int) string {
+func priorityCell(priority string, width int) string {
 	padded := fmt.Sprintf("%-*s", width, priority)
 	switch strings.ToLower(priority) {
 	case "critical", "highest":
@@ -150,17 +147,10 @@ func jiraPriorityCell(priority string, width int) string {
 	}
 }
 
-func jiraStatusBadge(status string) string {
-	return jiraStatusCell(status, len(status))
-}
+func statusBadge(status string) string   { return statusCell(status, len(status)) }
+func priorityBadge(priority string) string { return priorityCell(priority, len(priority)) }
 
-func jiraPriorityBadge(priority string) string {
-	return jiraPriorityCell(priority, len(priority))
-}
-
-// --- jira get ---
-
-func jiraGetCmd() *cobra.Command {
+func getCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "get <KEY>",
 		Short: "Show full details of a Jira issue",
@@ -170,23 +160,22 @@ func jiraGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			inst, err := resolveJiraInstance(cfg, jiraInstanceFlag)
+			inst, err := resolveInstance(cfg, instanceFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildJiraClient(inst)
+			client, err := buildClient(inst)
 			if err != nil {
 				return err
 			}
 			ctx, cancel := apiCtx()
 			defer cancel()
-
 			issue, err := client.GetIssue(ctx, args[0])
 			if err != nil {
 				return err
 			}
-			if outputFormat == "json" {
-				return printJSON(issue)
+			if output.Format == "json" {
+				return output.PrintJSON(issue)
 			}
 			printFullIssue(issue, inst.BaseURL)
 			return nil
@@ -205,8 +194,8 @@ func printFullIssue(issue *jiraclient.FullIssue, baseURL string) {
 		fmt.Printf("  %-14s%s\n", tui.StyleDim.Render(label), value)
 	}
 
-	row("Status", jiraStatusBadge(issue.Status))
-	row("Priority", jiraPriorityBadge(issue.Priority))
+	row("Status", statusBadge(issue.Status))
+	row("Priority", priorityBadge(issue.Priority))
 	row("Type", tui.StyleNormal.Render(issue.IssueType))
 	row("Project", tui.StyleNormal.Render(issue.ProjectKey+" · "+issue.ProjectName))
 	row("Assignee", tui.StyleNormal.Render(issue.Assignee))
@@ -228,9 +217,7 @@ func printFullIssue(issue *jiraclient.FullIssue, baseURL string) {
 	fmt.Println()
 }
 
-// --- jira create ---
-
-func jiraCreateCmd() *cobra.Command {
+func createCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "create",
 		Short: "Create a new Jira issue interactively",
@@ -240,19 +227,17 @@ func jiraCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			inst, err := resolveJiraInstance(cfg, jiraInstanceFlag)
+			inst, err := resolveInstance(cfg, instanceFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildJiraClient(inst)
+			client, err := buildClient(inst)
 			if err != nil {
 				return err
 			}
 
 			ctx, cancel := apiCtx()
 			defer cancel()
-
-			// Pick project
 			stop := tui.StartSpinner("Fetching projects…")
 			projects, err := client.GetProjects(ctx)
 			stop()
@@ -273,7 +258,6 @@ func jiraCreateCmd() *cobra.Command {
 			}
 			project := projects[pidx]
 
-			// Pick issue type (non-subtask only)
 			ctx2, cancel2 := apiCtx()
 			defer cancel2()
 			stop = tui.StartSpinner("Fetching issue types…")
@@ -302,13 +286,11 @@ func jiraCreateCmd() *cobra.Command {
 			}
 			issueType := topLevel[itidx]
 
-			// Summary
 			summary, err := tui.Prompt("Summary", "", "Brief description of the issue")
 			if err != nil || summary == "" {
 				return nil
 			}
 
-			// Priority
 			priorities := []string{"Highest", "High", "Medium", "Low", "Lowest"}
 			priItems := make([]tui.SelectItem, len(priorities))
 			for i, p := range priorities {
@@ -319,7 +301,6 @@ func jiraCreateCmd() *cobra.Command {
 				return nil
 			}
 
-			// Description (optional)
 			description, err := tui.Prompt("Description (optional)", "", "")
 			if err != nil {
 				return nil
@@ -341,9 +322,7 @@ func jiraCreateCmd() *cobra.Command {
 	}
 }
 
-// --- jira update ---
-
-func jiraUpdateCmd() *cobra.Command {
+func updateCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "update <KEY>",
 		Short: "Update summary, priority, or description of a Jira issue interactively",
@@ -353,11 +332,11 @@ func jiraUpdateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			inst, err := resolveJiraInstance(cfg, jiraInstanceFlag)
+			inst, err := resolveInstance(cfg, instanceFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildJiraClient(inst)
+			client, err := buildClient(inst)
 			if err != nil {
 				return err
 			}
@@ -371,13 +350,11 @@ func jiraUpdateCmd() *cobra.Command {
 
 			fmt.Printf("\n  %s  %s\n\n", tui.StyleAccent.Render(issue.Key), tui.StyleNormal.Render(issue.Summary))
 
-			// Summary
 			newSummary, err := tui.Prompt("Summary", issue.Summary, "")
 			if err != nil {
 				return nil
 			}
 
-			// Priority picker — highlight the current selection
 			priorities := []string{"Highest", "High", "Medium", "Low", "Lowest"}
 			currentPriIdx := 2
 			for i, p := range priorities {
@@ -399,13 +376,11 @@ func jiraUpdateCmd() *cobra.Command {
 				return nil
 			}
 
-			// Description (blank = keep current)
 			newDesc, err := tui.Prompt("Description (leave blank to keep current)", "", "")
 			if err != nil {
 				return nil
 			}
 
-			// Build diff
 			fields := map[string]any{}
 			if newSummary != "" && newSummary != issue.Summary {
 				fields["summary"] = newSummary
@@ -434,9 +409,7 @@ func jiraUpdateCmd() *cobra.Command {
 	}
 }
 
-// --- jira transition ---
-
-func jiraTransitionCmd() *cobra.Command {
+func transitionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "transition <KEY>",
 		Short: "Transition a Jira issue to a new status",
@@ -446,11 +419,11 @@ func jiraTransitionCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			inst, err := resolveJiraInstance(cfg, jiraInstanceFlag)
+			inst, err := resolveInstance(cfg, instanceFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildJiraClient(inst)
+			client, err := buildClient(inst)
 			if err != nil {
 				return err
 			}
@@ -464,7 +437,7 @@ func jiraTransitionCmd() *cobra.Command {
 
 			fmt.Printf("\n  %s  %s\n  %s  %s\n\n",
 				tui.StyleAccent.Render(issue.Key), tui.StyleNormal.Render(issue.Summary),
-				tui.StyleDim.Render("Current:       "), jiraStatusBadge(issue.Status))
+				tui.StyleDim.Render("Current:       "), statusBadge(issue.Status))
 
 			ctx2, cancel2 := apiCtx()
 			defer cancel2()
@@ -495,15 +468,13 @@ func jiraTransitionCmd() *cobra.Command {
 			fmt.Printf("  %s  %s → %s\n\n",
 				tui.StyleOK.Render("✓"),
 				tui.StyleDim.Render(issue.Status),
-				jiraStatusBadge(transitions[idx].Name))
+				statusBadge(transitions[idx].Name))
 			return nil
 		},
 	}
 }
 
-// --- jira sync ---
-
-func jiraSyncCmd() *cobra.Command {
+func syncCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "sync",
 		Short: "List all your open Jira issues across configured instances",
@@ -522,9 +493,9 @@ func jiraSyncCmd() *cobra.Command {
 			defer cancel()
 
 			type result struct {
-				Instance string          `json:"instance"`
+				Instance string             `json:"instance"`
 				Issues   []jiraclient.Issue `json:"issues"`
-				Error    string          `json:"error,omitempty"`
+				Error    string             `json:"error,omitempty"`
 			}
 
 			results := make([]result, len(cfg.Integrations.Jira))
@@ -534,7 +505,7 @@ func jiraSyncCmd() *cobra.Command {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					client, err := buildJiraClient(inst)
+					client, err := buildClient(inst)
 					if err != nil {
 						results[i] = result{Instance: inst.Name, Error: err.Error()}
 						return
@@ -549,8 +520,8 @@ func jiraSyncCmd() *cobra.Command {
 			}
 			wg.Wait()
 
-			if outputFormat == "json" {
-				return printJSON(results)
+			if output.Format == "json" {
+				return output.PrintJSON(results)
 			}
 
 			for _, r := range results {
@@ -563,8 +534,8 @@ func jiraSyncCmd() *cobra.Command {
 				}
 				for _, iss := range r.Issues {
 					key := tui.StyleAccent.Render(fmt.Sprintf("%-12s", iss.Key))
-					status := jiraStatusCell(iss.Status, 14)
-					priority := jiraPriorityCell(iss.Priority, 10)
+					status := statusCell(iss.Status, 14)
+					priority := priorityCell(iss.Priority, 10)
 					fmt.Printf("  %s  %s  %s  %s\n", key, status, priority, tui.StyleNormal.Render(iss.Summary))
 				}
 				fmt.Println()
@@ -574,9 +545,7 @@ func jiraSyncCmd() *cobra.Command {
 	}
 }
 
-// --- jira worklog ---
-
-func jiraWorklogCmd() *cobra.Command {
+func worklogCmd() *cobra.Command {
 	var comment string
 	cmd := &cobra.Command{
 		Use:   "worklog <KEY> [duration]",
@@ -587,17 +556,16 @@ func jiraWorklogCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			inst, err := resolveJiraInstance(cfg, jiraInstanceFlag)
+			inst, err := resolveInstance(cfg, instanceFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildJiraClient(inst)
+			client, err := buildClient(inst)
 			if err != nil {
 				return err
 			}
 
 			key := args[0]
-
 			durStr := ""
 			if len(args) >= 2 {
 				durStr = args[1]
@@ -608,7 +576,7 @@ func jiraWorklogCmd() *cobra.Command {
 				}
 			}
 
-			seconds, err := parseWorkDuration(durStr)
+			seconds, err := ParseWorkDuration(durStr)
 			if err != nil {
 				return err
 			}
@@ -646,9 +614,7 @@ func jiraWorklogCmd() *cobra.Command {
 	return cmd
 }
 
-// --- jira breakdown ---
-
-func jiraBreakdownCmd() *cobra.Command {
+func breakdownCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "breakdown <KEY>",
 		Short: "Use Claude AI to suggest and create subtasks for an issue",
@@ -661,16 +627,15 @@ func jiraBreakdownCmd() *cobra.Command {
 			if cfg.Integrations.Claude == nil || cfg.Integrations.Claude.APIKey == "" {
 				return fmt.Errorf("integrations.claude.api_key is not configured")
 			}
-			inst, err := resolveJiraInstance(cfg, jiraInstanceFlag)
+			inst, err := resolveInstance(cfg, instanceFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildJiraClient(inst)
+			client, err := buildClient(inst)
 			if err != nil {
 				return err
 			}
 
-			// Fetch issue
 			ctx, cancel := apiCtx()
 			defer cancel()
 			stop := tui.StartSpinner("Fetching issue…")
@@ -704,7 +669,6 @@ Maximum 8 subtasks. No explanation, no markdown fences — just the raw JSON arr
 				return fmt.Errorf("claude: %w", err)
 			}
 
-			// Extract JSON array from response (Claude may include preamble)
 			start := strings.Index(response, "[")
 			end := strings.LastIndex(response, "]")
 			if start < 0 || end < 0 || end <= start {
@@ -732,7 +696,6 @@ Maximum 8 subtasks. No explanation, no markdown fences — just the raw JSON arr
 				return nil
 			}
 
-			// Find subtask issue type
 			ctx3, cancel3 := apiCtx()
 			defer cancel3()
 			issueTypes, err := client.GetIssueTypes(ctx3, issue.ProjectKey)

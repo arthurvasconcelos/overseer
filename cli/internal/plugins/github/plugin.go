@@ -17,6 +17,7 @@ func init() {
 		Name:        "github",
 		Description: "GitHub pull requests",
 		IsEnabled:   isEnabled,
+		Commands:    commands,
 		DailyItems:  dailyItems,
 	})
 }

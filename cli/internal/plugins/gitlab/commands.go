@@ -1,4 +1,4 @@
-package cmd
+package gitlab
 
 import (
 	"context"
@@ -7,27 +7,28 @@ import (
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	gitlabclient "github.com/arthurvasconcelos/overseer/internal/gitlab"
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/secrets"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
 )
 
-var gitlabInstanceFlag string
+var instanceFlag string
 
-var gitlabCmd = &cobra.Command{
-	Use:   "gitlab",
-	Short: "GitLab interactions — issues, mrs, merged",
+func commands(cfg *config.Config) []*cobra.Command {
+	root := &cobra.Command{
+		Use:         "gitlab",
+		Short:       "GitLab interactions — issues, mrs, merged",
+		Annotations: map[string]string{"overseer/group": "Dev"},
+	}
+	root.PersistentFlags().StringVar(&instanceFlag, "instance", "", "GitLab instance name (auto-selects if only one configured)")
+	root.AddCommand(issuesCmd())
+	root.AddCommand(mrsCmd())
+	root.AddCommand(mergedCmd())
+	return []*cobra.Command{root}
 }
 
-func init() {
-	gitlabCmd.PersistentFlags().StringVar(&gitlabInstanceFlag, "instance", "", "GitLab instance name (auto-selects if only one configured)")
-	gitlabCmd.AddCommand(gitlabIssuesCmd())
-	gitlabCmd.AddCommand(gitlabMRsCmd())
-	gitlabCmd.AddCommand(gitlabMergedCmd())
-	rootCmd.AddCommand(gitlabCmd)
-}
-
-func resolveGitLabInstance(cfg *config.Config, name string) (config.GitLabInstance, error) {
+func resolveInstance(cfg *config.Config, name string) (config.GitLabInstance, error) {
 	if len(cfg.Integrations.GitLab) == 0 {
 		return config.GitLabInstance{}, fmt.Errorf("no GitLab instances configured")
 	}
@@ -56,7 +57,7 @@ func resolveGitLabInstance(cfg *config.Config, name string) (config.GitLabInstan
 	return cfg.Integrations.GitLab[idx], nil
 }
 
-func buildGitLabClient(inst config.GitLabInstance) (*gitlabclient.Client, error) {
+func buildClient(inst config.GitLabInstance) (*gitlabclient.Client, error) {
 	token, err := secrets.ReadAs(inst.Token, inst.OPAccount)
 	if err != nil {
 		return nil, fmt.Errorf("resolving token: %w", err)
@@ -64,7 +65,7 @@ func buildGitLabClient(inst config.GitLabInstance) (*gitlabclient.Client, error)
 	return gitlabclient.New(inst.BaseURL, token), nil
 }
 
-func gitlabIssuesCmd() *cobra.Command {
+func issuesCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "issues",
 		Short: "List open issues assigned to you",
@@ -74,11 +75,11 @@ func gitlabIssuesCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			inst, err := resolveGitLabInstance(cfg, gitlabInstanceFlag)
+			inst, err := resolveInstance(cfg, instanceFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildGitLabClient(inst)
+			client, err := buildClient(inst)
 			if err != nil {
 				return err
 			}
@@ -86,11 +87,11 @@ func gitlabIssuesCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if outputFormat == "json" {
+			if output.Format == "json" {
 				if issues == nil {
 					issues = []gitlabclient.Issue{}
 				}
-				return printJSON(issues)
+				return output.PrintJSON(issues)
 			}
 			badge := pluralize(len(issues), "open issue", "open issues")
 			fmt.Println(tui.SectionHeader("GitLab / "+inst.Name+" — Issues", badge))
@@ -108,7 +109,7 @@ func gitlabIssuesCmd() *cobra.Command {
 	}
 }
 
-func gitlabMRsCmd() *cobra.Command {
+func mrsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "mrs",
 		Short: "List open merge requests assigned to or created by you",
@@ -118,11 +119,11 @@ func gitlabMRsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			inst, err := resolveGitLabInstance(cfg, gitlabInstanceFlag)
+			inst, err := resolveInstance(cfg, instanceFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildGitLabClient(inst)
+			client, err := buildClient(inst)
 			if err != nil {
 				return err
 			}
@@ -130,11 +131,11 @@ func gitlabMRsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if outputFormat == "json" {
+			if output.Format == "json" {
 				if mrs == nil {
 					mrs = []gitlabclient.MR{}
 				}
-				return printJSON(mrs)
+				return output.PrintJSON(mrs)
 			}
 			badge := pluralize(len(mrs), "open MR", "open MRs")
 			fmt.Println(tui.SectionHeader("GitLab / "+inst.Name+" — Merge Requests", badge))
@@ -145,7 +146,7 @@ func gitlabMRsCmd() *cobra.Command {
 			for _, mr := range mrs {
 				num := tui.StyleAccent.Render(fmt.Sprintf("!%-5d", mr.IID))
 				proj := tui.StyleMuted.Render(mr.Project)
-				ci := gitlabCIIndicator(mr.CI)
+				ci := ciIndicator(mr.CI)
 				draft := ""
 				if mr.Draft {
 					draft = tui.StyleMuted.Render(" [draft]")
@@ -157,7 +158,7 @@ func gitlabMRsCmd() *cobra.Command {
 	}
 }
 
-func gitlabMergedCmd() *cobra.Command {
+func mergedCmd() *cobra.Command {
 	var sinceDays int
 	cmd := &cobra.Command{
 		Use:   "merged",
@@ -168,11 +169,11 @@ func gitlabMergedCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			inst, err := resolveGitLabInstance(cfg, gitlabInstanceFlag)
+			inst, err := resolveInstance(cfg, instanceFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildGitLabClient(inst)
+			client, err := buildClient(inst)
 			if err != nil {
 				return err
 			}
@@ -181,11 +182,11 @@ func gitlabMergedCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if outputFormat == "json" {
+			if output.Format == "json" {
 				if mrs == nil {
 					mrs = []gitlabclient.MR{}
 				}
-				return printJSON(mrs)
+				return output.PrintJSON(mrs)
 			}
 			badge := pluralize(len(mrs), "merged MR", "merged MRs")
 			fmt.Println(tui.SectionHeader("GitLab / "+inst.Name+" — Merged", badge))
@@ -205,7 +206,7 @@ func gitlabMergedCmd() *cobra.Command {
 	return cmd
 }
 
-func gitlabCIIndicator(ci gitlabclient.CIStatus) string {
+func ciIndicator(ci gitlabclient.CIStatus) string {
 	switch ci {
 	case gitlabclient.CIPass:
 		return "  " + tui.StyleOK.Render("✓")
@@ -216,4 +217,11 @@ func gitlabCIIndicator(ci gitlabclient.CIStatus) string {
 	default:
 		return ""
 	}
+}
+
+func pluralize(n int, singular, plural string) string {
+	if n == 1 {
+		return fmt.Sprintf("1 %s", singular)
+	}
+	return fmt.Sprintf("%d %s", n, plural)
 }

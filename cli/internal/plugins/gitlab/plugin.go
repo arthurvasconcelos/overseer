@@ -10,6 +10,7 @@ func init() {
 		Name:        "gitlab",
 		Description: "GitLab merge requests",
 		IsEnabled:   isEnabled,
+		Commands:    commands,
 	})
 }
 

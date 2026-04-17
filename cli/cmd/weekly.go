@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	githubclient "github.com/arthurvasconcelos/overseer/internal/github"
 	gitlabclient "github.com/arthurvasconcelos/overseer/internal/gitlab"
@@ -79,7 +80,7 @@ func runWeekly(_ *cobra.Command, _ []string) error {
 	weekAgo := now.AddDate(0, 0, -7)
 	since := time.Date(weekAgo.Year(), weekAgo.Month(), weekAgo.Day(), 0, 0, 0, 0, weekAgo.Location())
 
-	if outputFormat == "json" {
+	if output.Format == "json" {
 		return runWeeklyJSON(ctx, cfg, since, now)
 	}
 

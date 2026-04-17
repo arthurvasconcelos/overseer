@@ -1,4 +1,4 @@
-package cmd
+package google
 
 import (
 	"context"
@@ -7,27 +7,28 @@ import (
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/gcal"
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/secrets"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
 )
 
-var gcalAccountFlag string
+var accountFlag string
 
-var gcalCmd = &cobra.Command{
-	Use:   "gcal",
-	Short: "Google Calendar — today, week, next event",
+func commands(cfg *config.Config) []*cobra.Command {
+	root := &cobra.Command{
+		Use:         "gcal",
+		Short:       "Google Calendar — today, week, next event",
+		Annotations: map[string]string{"overseer/group": "Daily"},
+	}
+	root.PersistentFlags().StringVar(&accountFlag, "account", "", "Google account name (auto-selects if only one configured)")
+	root.AddCommand(todayCmd())
+	root.AddCommand(weekCmd())
+	root.AddCommand(nextCmd())
+	return []*cobra.Command{root}
 }
 
-func init() {
-	gcalCmd.PersistentFlags().StringVar(&gcalAccountFlag, "account", "", "Google account name (auto-selects if only one configured)")
-	gcalCmd.AddCommand(gcalTodayCmd())
-	gcalCmd.AddCommand(gcalWeekCmd())
-	gcalCmd.AddCommand(gcalNextCmd())
-	rootCmd.AddCommand(gcalCmd)
-}
-
-func resolveGoogleAccount(cfg *config.Config, name string) (config.GoogleAccount, error) {
+func resolveAccount(cfg *config.Config, name string) (config.GoogleAccount, error) {
 	if len(cfg.Integrations.Google) == 0 {
 		return config.GoogleAccount{}, fmt.Errorf("no Google accounts configured")
 	}
@@ -56,7 +57,7 @@ func resolveGoogleAccount(cfg *config.Config, name string) (config.GoogleAccount
 	return cfg.Integrations.Google[idx], nil
 }
 
-func buildGCalClient(ctx context.Context, acc config.GoogleAccount) (*gcal.Client, error) {
+func buildCalClient(ctx context.Context, acc config.GoogleAccount) (*gcal.Client, error) {
 	credsJSON, err := secrets.ReadAs(acc.CredentialsDoc, acc.OPAccount)
 	if err != nil {
 		return nil, fmt.Errorf("resolving credentials: %w", err)
@@ -64,7 +65,7 @@ func buildGCalClient(ctx context.Context, acc config.GoogleAccount) (*gcal.Clien
 	return gcal.New(ctx, []byte(credsJSON), acc.Name)
 }
 
-func printEvents(events []gcal.Event, label string) {
+func printEvents(events []gcal.Event, showDate bool) {
 	for _, e := range events {
 		var timeCol string
 		if e.AllDay {
@@ -76,7 +77,7 @@ func printEvents(events []gcal.Event, label string) {
 		if e.JoinURL != "" {
 			title += "  " + tui.StyleAccent.Render(tui.Hyperlink(e.JoinURL, "[Join]"))
 		}
-		if label != "" {
+		if showDate {
 			day := tui.StyleMuted.Render(e.Start.Format("Mon 02/01"))
 			fmt.Printf("  %s  %s  %s\n", day, timeCol, title)
 		} else {
@@ -85,7 +86,7 @@ func printEvents(events []gcal.Event, label string) {
 	}
 }
 
-func gcalTodayCmd() *cobra.Command {
+func todayCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "today",
 		Short: "Show today's calendar events",
@@ -95,11 +96,11 @@ func gcalTodayCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			acc, err := resolveGoogleAccount(cfg, gcalAccountFlag)
+			acc, err := resolveAccount(cfg, accountFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildGCalClient(ctx, acc)
+			client, err := buildCalClient(ctx, acc)
 			if err != nil {
 				return err
 			}
@@ -107,8 +108,8 @@ func gcalTodayCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if outputFormat == "json" {
-				return printJSON(events)
+			if output.Format == "json" {
+				return output.PrintJSON(events)
 			}
 			badge := pluralize(len(events), "event today", "events today")
 			fmt.Println(tui.SectionHeader("Google Calendar / "+acc.Name, badge))
@@ -116,13 +117,13 @@ func gcalTodayCmd() *cobra.Command {
 				fmt.Println("  " + tui.StyleMuted.Render("no events today"))
 				return nil
 			}
-			printEvents(events, "")
+			printEvents(events, false)
 			return nil
 		},
 	}
 }
 
-func gcalWeekCmd() *cobra.Command {
+func weekCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "week",
 		Short: "Show events for the next 7 days",
@@ -132,11 +133,11 @@ func gcalWeekCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			acc, err := resolveGoogleAccount(cfg, gcalAccountFlag)
+			acc, err := resolveAccount(cfg, accountFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildGCalClient(ctx, acc)
+			client, err := buildCalClient(ctx, acc)
 			if err != nil {
 				return err
 			}
@@ -144,8 +145,8 @@ func gcalWeekCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if outputFormat == "json" {
-				return printJSON(events)
+			if output.Format == "json" {
+				return output.PrintJSON(events)
 			}
 			badge := pluralize(len(events), "event this week", "events this week")
 			fmt.Println(tui.SectionHeader("Google Calendar / "+acc.Name, badge))
@@ -153,13 +154,13 @@ func gcalWeekCmd() *cobra.Command {
 				fmt.Println("  " + tui.StyleMuted.Render("no events this week"))
 				return nil
 			}
-			printEvents(events, "week")
+			printEvents(events, true)
 			return nil
 		},
 	}
 }
 
-func gcalNextCmd() *cobra.Command {
+func nextCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "next",
 		Short: "Show the next upcoming event",
@@ -169,11 +170,11 @@ func gcalNextCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			acc, err := resolveGoogleAccount(cfg, gcalAccountFlag)
+			acc, err := resolveAccount(cfg, accountFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildGCalClient(ctx, acc)
+			client, err := buildCalClient(ctx, acc)
 			if err != nil {
 				return err
 			}
@@ -181,11 +182,11 @@ func gcalNextCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if outputFormat == "json" {
+			if output.Format == "json" {
 				if event == nil {
-					return printJSON([]any{})
+					return output.PrintJSON([]any{})
 				}
-				return printJSON(event)
+				return output.PrintJSON(event)
 			}
 			fmt.Println(tui.SectionHeader("Google Calendar / "+acc.Name, "next event"))
 			if event == nil {
@@ -199,7 +200,7 @@ func gcalNextCmd() *cobra.Command {
 				timeCol = tui.StyleAccent.Render(event.Start.Format("15:04") + " – " + event.End.Format("15:04"))
 				until := time.Until(event.Start)
 				if until > 0 {
-					timeCol += "  " + tui.StyleMuted.Render("(in "+formatDurationGCal(until)+")")
+					timeCol += "  " + tui.StyleMuted.Render("(in "+formatDuration(until)+")")
 				}
 			}
 			title := tui.StyleNormal.Render(event.Title)
@@ -219,12 +220,3 @@ func pluralize(n int, singular, plural string) string {
 	return fmt.Sprintf("%d %s", n, plural)
 }
 
-func formatDurationGCal(d time.Duration) string {
-	d = d.Round(time.Minute)
-	h := int(d.Hours())
-	m := int(d.Minutes()) % 60
-	if h > 0 {
-		return fmt.Sprintf("%dh%dm", h, m)
-	}
-	return fmt.Sprintf("%dm", m)
-}

@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -63,7 +64,7 @@ type contextManifest struct {
 }
 
 func runContext(_ *cobra.Command, _ []string) error {
-	if outputFormat == "json" {
+	if output.Format == "json" {
 		return runContextJSON()
 	}
 	if contextCopy {
@@ -213,7 +214,7 @@ func runContextJSON() error {
 		manifest.Commands = append(manifest.Commands, buildCommandJSON(cmd))
 	}
 
-	return printJSON(manifest)
+	return output.PrintJSON(manifest)
 }
 
 func buildCommandJSON(cmd *cobra.Command) commandJSON {

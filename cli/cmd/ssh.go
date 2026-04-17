@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
@@ -58,7 +59,7 @@ func runSSHList(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	profiles := cfg.SSH.Profiles
-	if outputFormat == "json" {
+	if output.Format == "json" {
 		type item struct {
 			Name   string `json:"name"`
 			Active bool   `json:"active"`
@@ -68,7 +69,7 @@ func runSSHList(_ *cobra.Command, _ []string) error {
 		for i, p := range profiles {
 			out[i] = item{Name: p.Name, Active: p.Name == active}
 		}
-		return printJSON(out)
+		return output.PrintJSON(out)
 	}
 	if len(profiles) == 0 {
 		fmt.Println(tui.StyleMuted.Render("no SSH profiles configured — add ssh.profiles to config.yaml"))
@@ -94,12 +95,12 @@ func runSSHShow(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if outputFormat == "json" {
+	if output.Format == "json" {
 		type out struct {
 			Name   string `json:"name"`
 			Config string `json:"config"`
 		}
-		return printJSON(out{Name: profile.Name, Config: profile.Config})
+		return output.PrintJSON(out{Name: profile.Name, Config: profile.Config})
 	}
 	fmt.Println(tui.SectionHeader("ssh: "+profile.Name, ""))
 	fmt.Println()

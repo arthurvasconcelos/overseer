@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	obsidianpkg "github.com/arthurvasconcelos/overseer/internal/obsidian"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
@@ -285,11 +286,11 @@ func runNoteSearch(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("search: %w", err)
 	}
 
-	if outputFormat == "json" {
+	if output.Format == "json" {
 		if results == nil {
 			results = []obsidianpkg.SearchResult{}
 		}
-		return printJSON(results)
+		return output.PrintJSON(results)
 	}
 
 	if len(results) == 0 {

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/github"
 	"github.com/arthurvasconcelos/overseer/internal/gitlab"
@@ -79,7 +80,7 @@ func runPRs(_ *cobra.Command, _ []string) error {
 		})
 	}
 
-	if outputFormat == "json" {
+	if output.Format == "json" {
 		return runPRsJSON(ctx, cfg)
 	}
 
@@ -210,7 +211,7 @@ func runPRsJSON(ctx context.Context, cfg *config.Config) error {
 	if out == nil {
 		out = []any{}
 	}
-	return printJSON(out)
+	return output.PrintJSON(out)
 }
 
 func printGitHubPRs(ctx context.Context, inst config.GitHubInstance, w *bytes.Buffer) error {

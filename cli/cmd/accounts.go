@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -49,8 +50,8 @@ func runAccounts(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("parsing accounts: %w", err)
 	}
 
-	if outputFormat == "json" {
-		return printJSON(accounts)
+	if output.Format == "json" {
+		return output.PrintJSON(accounts)
 	}
 
 	header := fmt.Sprintf("  %-30s  %-40s  %s", "ACCOUNT", "EMAIL", "USER ID (use as op_account)")

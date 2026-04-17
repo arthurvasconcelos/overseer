@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
+	jiraclient "github.com/arthurvasconcelos/overseer/internal/jira"
 	"github.com/arthurvasconcelos/overseer/internal/notify"
+	"github.com/arthurvasconcelos/overseer/internal/secrets"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -38,7 +42,7 @@ func runFocus(_ *cobra.Command, args []string) error {
 		durStr = args[0]
 	}
 
-	seconds, err := parseWorkDuration(durStr)
+	seconds, err := focusParseWorkDuration(durStr)
 	if err != nil {
 		return err
 	}
@@ -56,7 +60,7 @@ func runFocus(_ *cobra.Command, args []string) error {
 
 	startTime := time.Now()
 	end := startTime.Add(duration)
-	elapsed := duration // default to full session; updated on interrupt
+	elapsed := duration
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -100,14 +104,34 @@ outer:
 		if err != nil {
 			return err
 		}
-		inst, err := resolveJiraInstance(cfg, focusInstanceFlag)
-		if err != nil {
-			return err
+
+		if len(cfg.Integrations.Jira) == 0 {
+			return fmt.Errorf("no Jira instances configured")
 		}
-		client, err := buildJiraClient(inst)
-		if err != nil {
-			return err
+		inst := cfg.Integrations.Jira[0]
+		if focusInstanceFlag != "" {
+			found := false
+			for _, i := range cfg.Integrations.Jira {
+				if i.Name == focusInstanceFlag {
+					inst = i
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("Jira instance %q not found", focusInstanceFlag)
+			}
 		}
+
+		email, err := secrets.ReadAs(inst.Email, inst.OPAccount)
+		if err != nil {
+			return fmt.Errorf("resolving email: %w", err)
+		}
+		token, err := secrets.ReadAs(inst.Token, inst.OPAccount)
+		if err != nil {
+			return fmt.Errorf("resolving token: %w", err)
+		}
+		client := jiraclient.New(inst.BaseURL, email, token)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -122,7 +146,6 @@ outer:
 	return nil
 }
 
-// formatCountdown formats a duration as MM:SS or HH:MM:SS.
 func formatCountdown(d time.Duration) string {
 	d = d.Round(time.Second)
 	h := int(d.Hours())
@@ -132,4 +155,38 @@ func formatCountdown(d time.Duration) string {
 		return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
 	}
 	return fmt.Sprintf("%02d:%02d", m, s)
+}
+
+func focusParseWorkDuration(s string) (int, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("empty duration")
+	}
+	total := 0
+	if idx := strings.Index(s, "h"); idx >= 0 {
+		h, err := strconv.Atoi(strings.TrimSpace(s[:idx]))
+		if err != nil {
+			return 0, fmt.Errorf("invalid hours in %q", s)
+		}
+		total += h * 3600
+		s = strings.TrimSpace(s[idx+1:])
+	}
+	if idx := strings.Index(s, "m"); idx >= 0 {
+		m, err := strconv.Atoi(strings.TrimSpace(s[:idx]))
+		if err != nil {
+			return 0, fmt.Errorf("invalid minutes in %q", s)
+		}
+		total += m * 60
+		s = strings.TrimSpace(s[idx+1:])
+	} else if s != "" {
+		m, err := strconv.Atoi(s)
+		if err != nil {
+			return 0, fmt.Errorf("invalid duration %q — use formats like 1h30m, 45m, 90", s)
+		}
+		total += m * 60
+	}
+	if total <= 0 {
+		return 0, fmt.Errorf("duration must be positive")
+	}
+	return total, nil
 }

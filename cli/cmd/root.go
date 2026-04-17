@@ -1,14 +1,12 @@
 package cmd
 
 import (
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/spf13/cobra"
 )
 
 // Version is injected at build time via -ldflags.
 var Version = "dev"
-
-// outputFormat holds the value of the --format flag ("text" or "json").
-var outputFormat string
 
 var rootCmd = &cobra.Command{
 	Use:   "overseer",
@@ -25,7 +23,7 @@ func Execute() {
 func init() {
 	rootCmd.Version = Version
 	rootCmd.SetVersionTemplate("overseer {{.Version}}\n")
-	rootCmd.PersistentFlags().StringVar(&outputFormat, "format", "text", "Output format: text or json")
+	rootCmd.PersistentFlags().StringVar(&output.Format, "format", "text", "Output format: text or json")
 	rootCmd.InitDefaultCompletionCmd()
 	registerPlugins()
 	registerNativePluginCommands()

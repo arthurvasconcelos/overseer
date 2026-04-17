@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/notify"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
@@ -90,8 +91,8 @@ func runReposSearch(_ *cobra.Command, args []string) error {
 		return err
 	}
 	if len(cfg.Repos) == 0 {
-		if outputFormat == "json" {
-			return printJSON([]reposSearchMatch{})
+		if output.Format == "json" {
+			return output.PrintJSON([]reposSearchMatch{})
 		}
 		fmt.Println(tui.StyleMuted.Render("no repos configured"))
 		return nil
@@ -126,11 +127,11 @@ func runReposSearch(_ *cobra.Command, args []string) error {
 		}
 	}
 
-	if outputFormat == "json" {
+	if output.Format == "json" {
 		if allMatches == nil {
 			allMatches = []reposSearchMatch{}
 		}
-		return printJSON(allMatches)
+		return output.PrintJSON(allMatches)
 	}
 
 	if len(allMatches) == 0 {
@@ -308,8 +309,8 @@ func runReposStatus(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	if len(cfg.Repos) == 0 {
-		if outputFormat == "json" {
-			return printJSON([]repoStatusJSON{})
+		if output.Format == "json" {
+			return output.PrintJSON([]repoStatusJSON{})
 		}
 		fmt.Println(tui.StyleMuted.Render("no repos configured — add entries under repos: in config.yaml"))
 		return nil
@@ -329,7 +330,7 @@ func runReposStatus(_ *cobra.Command, _ []string) error {
 	}
 	wg.Wait()
 
-	if outputFormat == "json" {
+	if output.Format == "json" {
 		out := make([]repoStatusJSON, len(cfg.Repos))
 		for i, repo := range cfg.Repos {
 			path := repoRoot(home, repo)
@@ -365,7 +366,7 @@ func runReposStatus(_ *cobra.Command, _ []string) error {
 			s.Clean = len(s.Changes) == 0
 			out[i] = s
 		}
-		return printJSON(out)
+		return output.PrintJSON(out)
 	}
 
 	for _, r := range results {

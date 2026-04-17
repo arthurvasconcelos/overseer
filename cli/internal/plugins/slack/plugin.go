@@ -17,6 +17,7 @@ func init() {
 		Name:         "slack",
 		Description:  "Slack mentions",
 		IsEnabled:    isEnabled,
+		Commands:     commands,
 		DailyItems:   dailyItems,
 		StatusChecks: statusChecks,
 	})

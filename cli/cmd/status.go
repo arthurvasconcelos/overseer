@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/nativeplugin"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
@@ -96,12 +97,12 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	}
 	wg.Wait()
 
-	if outputFormat == "json" {
+	if output.Format == "json" {
 		out := make([]checkResultJSON, len(results))
 		for i, r := range results {
 			out[i] = checkResultJSON{Name: r.name, OK: r.ok, Message: r.msg}
 		}
-		return printJSON(out)
+		return output.PrintJSON(out)
 	}
 
 	// Calculate column width for alignment.

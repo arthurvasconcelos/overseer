@@ -18,6 +18,7 @@ func init() {
 		Name:         "google",
 		Description:  "Google Calendar events",
 		IsEnabled:    isEnabled,
+		Commands:     commands,
 		DailyItems:   dailyItems,
 		StatusChecks: statusChecks,
 	})

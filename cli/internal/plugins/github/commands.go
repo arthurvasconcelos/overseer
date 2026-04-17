@@ -1,4 +1,4 @@
-package cmd
+package github
 
 import (
 	"context"
@@ -7,27 +7,28 @@ import (
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	githubclient "github.com/arthurvasconcelos/overseer/internal/github"
+	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/secrets"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
 )
 
-var githubInstanceFlag string
+var instanceFlag string
 
-var githubCmd = &cobra.Command{
-	Use:   "github",
-	Short: "GitHub interactions — issues, prs, merged",
+func commands(cfg *config.Config) []*cobra.Command {
+	root := &cobra.Command{
+		Use:         "github",
+		Short:       "GitHub interactions — issues, prs, merged",
+		Annotations: map[string]string{"overseer/group": "Dev"},
+	}
+	root.PersistentFlags().StringVar(&instanceFlag, "instance", "", "GitHub account name (auto-selects if only one configured)")
+	root.AddCommand(issuesCmd())
+	root.AddCommand(prsCmd())
+	root.AddCommand(mergedCmd())
+	return []*cobra.Command{root}
 }
 
-func init() {
-	githubCmd.PersistentFlags().StringVar(&githubInstanceFlag, "instance", "", "GitHub account name (auto-selects if only one configured)")
-	githubCmd.AddCommand(githubIssuesCmd())
-	githubCmd.AddCommand(githubPRsCmd())
-	githubCmd.AddCommand(githubMergedCmd())
-	rootCmd.AddCommand(githubCmd)
-}
-
-func resolveGitHubInstance(cfg *config.Config, name string) (config.GitHubInstance, error) {
+func resolveInstance(cfg *config.Config, name string) (config.GitHubInstance, error) {
 	if len(cfg.Integrations.GitHub) == 0 {
 		return config.GitHubInstance{}, fmt.Errorf("no GitHub accounts configured")
 	}
@@ -56,7 +57,7 @@ func resolveGitHubInstance(cfg *config.Config, name string) (config.GitHubInstan
 	return cfg.Integrations.GitHub[idx], nil
 }
 
-func buildGitHubClient(inst config.GitHubInstance) (*githubclient.Client, error) {
+func buildClient(inst config.GitHubInstance) (*githubclient.Client, error) {
 	token, err := secrets.ReadAs(inst.Token, inst.OPAccount)
 	if err != nil {
 		return nil, fmt.Errorf("resolving token: %w", err)
@@ -64,7 +65,7 @@ func buildGitHubClient(inst config.GitHubInstance) (*githubclient.Client, error)
 	return githubclient.New(token), nil
 }
 
-func githubIssuesCmd() *cobra.Command {
+func issuesCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "issues",
 		Short: "List open issues assigned to you",
@@ -74,11 +75,11 @@ func githubIssuesCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			inst, err := resolveGitHubInstance(cfg, githubInstanceFlag)
+			inst, err := resolveInstance(cfg, instanceFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildGitHubClient(inst)
+			client, err := buildClient(inst)
 			if err != nil {
 				return err
 			}
@@ -86,11 +87,11 @@ func githubIssuesCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if outputFormat == "json" {
+			if output.Format == "json" {
 				if issues == nil {
 					issues = []githubclient.Issue{}
 				}
-				return printJSON(issues)
+				return output.PrintJSON(issues)
 			}
 			badge := pluralize(len(issues), "open issue", "open issues")
 			fmt.Println(tui.SectionHeader("GitHub / "+inst.Name+" — Issues", badge))
@@ -108,7 +109,7 @@ func githubIssuesCmd() *cobra.Command {
 	}
 }
 
-func githubPRsCmd() *cobra.Command {
+func prsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "prs",
 		Short: "List open pull requests involving you",
@@ -118,11 +119,11 @@ func githubPRsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			inst, err := resolveGitHubInstance(cfg, githubInstanceFlag)
+			inst, err := resolveInstance(cfg, instanceFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildGitHubClient(inst)
+			client, err := buildClient(inst)
 			if err != nil {
 				return err
 			}
@@ -130,11 +131,11 @@ func githubPRsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if outputFormat == "json" {
+			if output.Format == "json" {
 				if prs == nil {
 					prs = []githubclient.PR{}
 				}
-				return printJSON(prs)
+				return output.PrintJSON(prs)
 			}
 			badge := pluralize(len(prs), "open PR", "open PRs")
 			fmt.Println(tui.SectionHeader("GitHub / "+inst.Name+" — Pull Requests", badge))
@@ -157,7 +158,7 @@ func githubPRsCmd() *cobra.Command {
 	}
 }
 
-func githubMergedCmd() *cobra.Command {
+func mergedCmd() *cobra.Command {
 	var sinceDays int
 	cmd := &cobra.Command{
 		Use:   "merged",
@@ -168,11 +169,11 @@ func githubMergedCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			inst, err := resolveGitHubInstance(cfg, githubInstanceFlag)
+			inst, err := resolveInstance(cfg, instanceFlag)
 			if err != nil {
 				return err
 			}
-			client, err := buildGitHubClient(inst)
+			client, err := buildClient(inst)
 			if err != nil {
 				return err
 			}
@@ -181,11 +182,11 @@ func githubMergedCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if outputFormat == "json" {
+			if output.Format == "json" {
 				if prs == nil {
 					prs = []githubclient.PR{}
 				}
-				return printJSON(prs)
+				return output.PrintJSON(prs)
 			}
 			badge := pluralize(len(prs), "merged PR", "merged PRs")
 			fmt.Println(tui.SectionHeader("GitHub / "+inst.Name+" — Merged", badge))
@@ -216,4 +217,11 @@ func ciIndicator(ci githubclient.CIStatus) string {
 	default:
 		return ""
 	}
+}
+
+func pluralize(n int, singular, plural string) string {
+	if n == 1 {
+		return fmt.Sprintf("1 %s", singular)
+	}
+	return fmt.Sprintf("%d %s", n, plural)
 }
