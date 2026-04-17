@@ -7,9 +7,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/arthurvasconcelos/overseer/internal/claudeai"
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/nativeplugin"
 	"github.com/arthurvasconcelos/overseer/internal/notify"
+	"github.com/arthurvasconcelos/overseer/internal/secrets"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -103,6 +105,25 @@ func runDaily(_ *cobra.Command, _ []string) error {
 		}
 	}
 	fmt.Print(body.String())
+
+	// Optional AI summary — opt-in via integrations.claude.daily_ai_summary: true.
+	if cfg.Integrations.Claude != nil && cfg.Integrations.Claude.DailyAISummary && cfg.Integrations.Claude.APIKey != "" {
+		aiCtx, aiCancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer aiCancel()
+		apiKey, err := secrets.ReadAs(cfg.Integrations.Claude.APIKey, "")
+		if err == nil {
+			summary, err := claudeai.New(apiKey).Ask(aiCtx,
+				"You are a terse assistant. Given a morning briefing, produce exactly 3 sentences: first, the top priority for today; second, one notable update or upcoming event; third, any blockers or risks. No lists, no headers.",
+				stripANSI(body.String()),
+				256,
+			)
+			if err == nil && summary != "" {
+				fmt.Println()
+				fmt.Println(tui.StyleHeader.Render("AI Summary"))
+				fmt.Println(summary)
+			}
+		}
+	}
 
 	if dailyCopy {
 		if err := copyToClipboard(body.String()); err != nil {

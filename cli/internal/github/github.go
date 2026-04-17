@@ -257,6 +257,59 @@ func (c *Client) MyIssues(ctx context.Context) ([]Issue, error) {
 	return issues, nil
 }
 
+// MergedPRs returns pull requests merged by or involving the authenticated user
+// since the given time, sorted by last updated.
+func (c *Client) MergedPRs(ctx context.Context, since time.Time) ([]PR, error) {
+	sinceStr := since.Format("2006-01-02")
+	url := "https://api.github.com/search/issues?q=is:pr+is:merged+involves:@me+archived:false+merged:>=" + sinceStr + "&sort=updated&per_page=50"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("github: request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("github: unexpected status %s", resp.Status)
+	}
+
+	var result struct {
+		Items []struct {
+			Number        int    `json:"number"`
+			Title         string `json:"title"`
+			HTMLURL       string `json:"html_url"`
+			RepositoryURL string `json:"repository_url"`
+			PullRequest   *struct {
+				URL string `json:"url"`
+			} `json:"pull_request"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("github: decoding response: %w", err)
+	}
+
+	prs := make([]PR, 0, len(result.Items))
+	for _, item := range result.Items {
+		if item.PullRequest == nil {
+			continue
+		}
+		prs = append(prs, PR{
+			Number: item.Number,
+			Title:  item.Title,
+			Repo:   repoFromURL(item.RepositoryURL),
+			URL:    item.HTMLURL,
+		})
+	}
+	return prs, nil
+}
+
 // repoFromURL extracts "owner/repo" from a GitHub repository API URL.
 // e.g. "https://api.github.com/repos/owner/repo" → "owner/repo"
 func repoFromURL(apiURL string) string {

@@ -103,8 +103,9 @@ type IntegrationsConfig struct {
 // ClaudeIntegration configures Claude AI API access for team persona consultations.
 // APIKey is an op:// reference or a plain Anthropic API key.
 type ClaudeIntegration struct {
-	APIKey      string `mapstructure:"api_key"      json:"api_key,omitempty"`
-	DefaultTeam string `mapstructure:"default_team" json:"default_team,omitempty"`
+	APIKey          string `mapstructure:"api_key"           json:"api_key,omitempty"`
+	DefaultTeam     string `mapstructure:"default_team"      json:"default_team,omitempty"`
+	DailyAISummary  bool   `mapstructure:"daily_ai_summary"  json:"daily_ai_summary,omitempty"`
 }
 
 // GitHubInstance configures a single GitHub account.

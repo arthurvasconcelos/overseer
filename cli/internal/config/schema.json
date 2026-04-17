@@ -367,7 +367,7 @@
       }
     },
     "claudeIntegration": {
-      "description": "Claude AI API integration. Used by `overseer claude teams consult` to call Claude with team persona system prompts.",
+      "description": "Claude AI API integration. Used by `overseer claude teams consult` and AI-enhanced commands.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -378,6 +378,10 @@
         "default_team": {
           "description": "Default team slug to use when --team is not specified.",
           "type": "string"
+        },
+        "daily_ai_summary": {
+          "description": "When true, append a 3-sentence AI-generated summary to `overseer daily` output.",
+          "type": "boolean"
         }
       }
     },
