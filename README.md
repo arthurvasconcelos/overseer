@@ -1,6 +1,10 @@
 # overseer
 
-A personal machine management CLI. Wraps daily workflows — briefings, git identities, repo management, notes, PR reviews, Homebrew, and more — into a single binary.
+![GitHub release](https://img.shields.io/github/v/release/arthurvasconcelos/overseer)
+![CI](https://img.shields.io/github/actions/workflow/status/arthurvasconcelos/overseer/ci.yml?label=CI)
+![Go version](https://img.shields.io/github/go-mod/go-version/arthurvasconcelos/overseer/main?filename=cli%2Fgo.mod)
+
+A personal developer CLI that unifies your daily workflow into a single binary — morning briefings, standup generation, focus sessions, git identities, repo management, notes, PR reviews, env/SSH profiles, Homebrew, and AI assistant integration.
 
 Personal files (dotfiles, Brewfile, config) live in a separate **brain** directory that you own and version independently. overseer manages that brain; the two repos are decoupled.
 
@@ -9,10 +13,14 @@ Personal files (dotfiles, Brewfile, config) live in a separate **brain** directo
 ## Install
 
 ```bash
+# macOS (Homebrew) — recommended
+brew install arthurvasconcelos/tap/overseer
+
+# Or via install script
 curl -fsSL https://raw.githubusercontent.com/arthurvasconcelos/overseer/main/scripts/install.sh | bash
 ```
 
-Installs the latest binary to `~/bin/`. Make sure `~/bin` is on your `PATH`.
+The install script drops the binary in `~/bin/`. Make sure `~/bin` is on your `PATH`.
 
 ---
 
@@ -22,8 +30,7 @@ Installs the latest binary to `~/bin/`. Make sure `~/bin` is on your `PATH`.
 overseer setup
 ```
 
-The interactive wizard walks through everything in one session:
-brain path, git remote, machine settings, directory scaffolding, dotfile wiring, and Brew packages.
+The interactive wizard walks through everything in one session: brain path, git remote, machine settings, directory scaffolding, dotfile wiring, and Brew packages.
 
 Safe to re-run anytime — existing values are shown as defaults and nothing is overwritten without your input.
 
@@ -91,6 +98,26 @@ Not everything overseer uses lives in the brain. Some directories are **referenc
 | `overseer notify` | Fire a native OS desktop notification |
 | `overseer update` | Self-update the binary |
 | `overseer run` | Run a command with secrets injected |
+
+All commands that produce structured data support `--format json`.
+
+---
+
+## Integrations
+
+Native plugins for the following services are built into the binary and activate automatically when configured:
+
+| Integration | Commands | Daily briefing | Status check |
+|---|---|---|---|
+| Jira | `overseer jira` | ✓ | ✓ |
+| Slack | `overseer slack` | ✓ | ✓ |
+| Google Calendar | `overseer gcal` | ✓ | ✓ |
+| GitHub | `overseer github` | ✓ | — |
+| GitLab | `overseer gitlab` | ✓ | ✓ |
+| Obsidian | — | ✓ | ✓ |
+| Claude | `overseer claude` | — | ✓ |
+
+Integration-specific commands only appear in help when that integration is configured.
 
 ---
 
