@@ -23,8 +23,8 @@ type cmdGroup struct {
 // Any command not listed here and without an annotation falls through to an "Other" section.
 var rootGroups = []cmdGroup{
 	{"Setup", []string{"setup", "brain", "brew"}},
-	{"Daily", []string{"daily", "standup", "weekly", "prs", "note", "status", "focus"}},
-	{"Dev", []string{"run", "repos", "git", "env", "ssh", "jira"}},
+	{"Daily", []string{"daily", "standup", "weekly", "prs", "note", "status", "focus", "gcal"}},
+	{"Dev", []string{"run", "repos", "git", "env", "ssh", "jira", "slack", "github", "gitlab"}},
 	{"AI", []string{"context", "mcp"}},
 	{"System", []string{"accounts", "config", "plugins", "notify", "update", "completion"}},
 }

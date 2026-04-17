@@ -84,6 +84,41 @@ func (c *Client) Mentions() ([]Mention, error) {
 	return mentions, nil
 }
 
+// Channel is a minimal representation of a Slack channel the bot is a member of.
+type Channel struct {
+	ID      string
+	Name    string
+	Private bool
+}
+
+// Channels returns the channels (public, private, DM) the bot is a member of.
+func (c *Client) Channels() ([]Channel, error) {
+	convs, _, err := c.api.GetConversations(&slack.GetConversationsParameters{
+		Types:           []string{"public_channel", "private_channel", "im", "mpim"},
+		ExcludeArchived: true,
+		Limit:           200,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("slack: listing channels: %w", err)
+	}
+	var channels []Channel
+	for _, ch := range convs {
+		if !ch.IsMember {
+			continue
+		}
+		name := ch.Name
+		if name == "" {
+			name = ch.ID
+		}
+		channels = append(channels, Channel{
+			ID:      ch.ID,
+			Name:    name,
+			Private: ch.IsPrivate,
+		})
+	}
+	return channels, nil
+}
+
 // Send posts a message to a channel or DM in the workspace.
 func (c *Client) Send(channel, text string) error {
 	_, _, err := c.api.PostMessage(channel, slack.MsgOptionText(text, false))

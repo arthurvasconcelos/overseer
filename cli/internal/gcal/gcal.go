@@ -98,6 +98,71 @@ func TokenStatus(accountName string) (TokenInfo, error) {
 	}, nil
 }
 
+// WeekEvents returns all events for the current week (today through 7 days from now).
+func (c *Client) WeekEvents(ctx context.Context) ([]Event, error) {
+	now := time.Now()
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	endOfWeek := startOfDay.Add(7 * 24 * time.Hour)
+
+	result, err := c.svc.Events.List("primary").
+		Context(ctx).
+		TimeMin(startOfDay.Format(time.RFC3339)).
+		TimeMax(endOfWeek.Format(time.RFC3339)).
+		SingleEvents(true).
+		OrderBy("startTime").
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("gcal: listing events: %w", err)
+	}
+
+	var events []Event
+	for _, item := range result.Items {
+		e := Event{Title: item.Summary}
+		if item.Start.DateTime != "" {
+			e.Start, _ = time.Parse(time.RFC3339, item.Start.DateTime)
+			e.End, _ = time.Parse(time.RFC3339, item.End.DateTime)
+		} else {
+			e.AllDay = true
+			e.Start, _ = time.Parse("2006-01-02", item.Start.Date)
+		}
+		e.JoinURL = extractJoinURL(item)
+		events = append(events, e)
+	}
+	return events, nil
+}
+
+// NextEvent returns the next upcoming event from now, or nil if none.
+func (c *Client) NextEvent(ctx context.Context) (*Event, error) {
+	now := time.Now()
+	endWindow := now.Add(24 * time.Hour)
+
+	result, err := c.svc.Events.List("primary").
+		Context(ctx).
+		TimeMin(now.Format(time.RFC3339)).
+		TimeMax(endWindow.Format(time.RFC3339)).
+		SingleEvents(true).
+		OrderBy("startTime").
+		MaxResults(1).
+		Do()
+	if err != nil {
+		return nil, fmt.Errorf("gcal: listing events: %w", err)
+	}
+	if len(result.Items) == 0 {
+		return nil, nil
+	}
+	item := result.Items[0]
+	e := Event{Title: item.Summary}
+	if item.Start.DateTime != "" {
+		e.Start, _ = time.Parse(time.RFC3339, item.Start.DateTime)
+		e.End, _ = time.Parse(time.RFC3339, item.End.DateTime)
+	} else {
+		e.AllDay = true
+		e.Start, _ = time.Parse("2006-01-02", item.Start.Date)
+	}
+	e.JoinURL = extractJoinURL(item)
+	return &e, nil
+}
+
 // TodaysEvents returns all events for today across all calendars.
 func (c *Client) TodaysEvents(ctx context.Context) ([]Event, error) {
 	now := time.Now()

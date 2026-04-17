@@ -51,3 +51,27 @@ def warn_line(label: str, msg: str) -> Text:
     t = Text("⚠  " + label + ":", style=STYLE_WARN)
     t.append(" " + msg, style=STYLE_MUTED)
     return t
+
+
+def ok_line(label: str, msg: str = "") -> Text:
+    """Render a success line.
+
+    Output example:
+        ✓  label: message
+    """
+    t = Text("✓  " + label, style=STYLE_OK)
+    if msg:
+        t.append(": " + msg, style=STYLE_MUTED)
+    return t
+
+
+def error_line(label: str, msg: str = "") -> Text:
+    """Render an error line.
+
+    Output example:
+        ✗  label: message
+    """
+    t = Text("✗  " + label, style=STYLE_ERROR)
+    if msg:
+        t.append(": " + msg, style=STYLE_MUTED)
+    return t

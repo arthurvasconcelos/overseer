@@ -58,3 +58,27 @@ export function sectionHeader(label: string, badge?: string): string {
 export function warnLine(label: string, msg: string): string {
   return styles.warn("⚠  " + label + ":") + " " + styles.muted(msg);
 }
+
+/**
+ * Render a success line.
+ *
+ * Output example:
+ *   ✓  label: message
+ */
+export function okLine(label: string, msg = ""): string {
+  let s = styles.ok("✓  " + label);
+  if (msg) s += styles.muted(": " + msg);
+  return s;
+}
+
+/**
+ * Render an error line.
+ *
+ * Output example:
+ *   ✗  label: message
+ */
+export function errorLine(label: string, msg = ""): string {
+  let s = styles.error("✗  " + label);
+  if (msg) s += styles.muted(": " + msg);
+  return s;
+}

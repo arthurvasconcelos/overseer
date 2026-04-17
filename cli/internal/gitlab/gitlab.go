@@ -68,6 +68,61 @@ func New(baseURL, token string) *Client {
 	}
 }
 
+// Issue is a minimal representation of a GitLab issue.
+type Issue struct {
+	IID     int    `json:"iid"`
+	Title   string `json:"title"`
+	Project string `json:"project"` // "namespace/project"
+	URL     string `json:"url"`
+}
+
+// MyIssues returns open issues assigned to the authenticated user.
+func (c *Client) MyIssues(ctx context.Context) ([]Issue, error) {
+	url := fmt.Sprintf("%s/api/v4/issues?state=opened&scope=assigned_to_me&per_page=50", c.baseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("PRIVATE-TOKEN", c.token)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("gitlab: request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("gitlab: unexpected status %s", resp.Status)
+	}
+
+	var items []struct {
+		IID        int    `json:"iid"`
+		Title      string `json:"title"`
+		WebURL     string `json:"web_url"`
+		References struct {
+			Full string `json:"full"`
+		} `json:"references"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		return nil, fmt.Errorf("gitlab: decoding response: %w", err)
+	}
+
+	issues := make([]Issue, 0, len(items))
+	for _, item := range items {
+		project := item.References.Full
+		if i := strings.LastIndex(project, "#"); i >= 0 {
+			project = project[:i]
+		}
+		issues = append(issues, Issue{
+			IID:     item.IID,
+			Title:   item.Title,
+			Project: project,
+			URL:     item.WebURL,
+		})
+	}
+	return issues, nil
+}
+
 // MyMRs returns open merge requests created by or assigned to the authenticated user.
 func (c *Client) MyMRs(ctx context.Context) ([]MR, error) {
 	seen := make(map[int]bool)
