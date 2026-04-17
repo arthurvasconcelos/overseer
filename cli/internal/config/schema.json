@@ -153,6 +153,28 @@
         }
       }
     },
+    "env": {
+      "description": "Named environment variable profiles. Use `overseer env use <name>` to emit export statements for a profile.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/envProfile" }
+        }
+      }
+    },
+    "ssh": {
+      "description": "Named SSH config profiles. Use `overseer ssh use <name>` to activate a profile and `overseer ssh setup` to wire the Include directive.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sshProfile" }
+        }
+      }
+    },
     "repos": {
       "description": "List of git repositories managed by overseer. Used by: overseer repos status/pull.",
       "type": "array",
@@ -367,6 +389,43 @@
         "enabled": {
           "description": "Explicitly enable (true) or disable (false) this plugin.",
           "type": "boolean"
+        }
+      }
+    },
+    "envProfile": {
+      "description": "A named set of environment variables emitted as export statements by `overseer env use`.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "description": "Unique profile name (e.g. \"work\", \"personal\").",
+          "type": "string"
+        },
+        "op_account": {
+          "description": "1Password account ID used to resolve op:// references in vars.",
+          "type": "string"
+        },
+        "vars": {
+          "description": "Map of environment variable names to values. Values may be op:// references resolved at runtime.",
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "sshProfile": {
+      "description": "A named SSH config snippet written verbatim to the active SSH config file on `overseer ssh use`.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "config"],
+      "properties": {
+        "name": {
+          "description": "Unique profile name (e.g. \"work\", \"personal\").",
+          "type": "string"
+        },
+        "config": {
+          "description": "Raw SSH config block (Host entries, etc.) written verbatim to the active SSH config file.",
+          "type": "string"
         }
       }
     },

@@ -4,6 +4,7 @@ package cmd
 // which calls nativeplugin.Register() to enroll the plugin in the registry.
 import (
 	_ "github.com/arthurvasconcelos/overseer/internal/plugins/claude"
+	_ "github.com/arthurvasconcelos/overseer/internal/plugins/devctx"
 	_ "github.com/arthurvasconcelos/overseer/internal/plugins/github"
 	_ "github.com/arthurvasconcelos/overseer/internal/plugins/gitlab"
 	_ "github.com/arthurvasconcelos/overseer/internal/plugins/google"

@@ -35,12 +35,38 @@ type PluginsConfig struct {
 	Settings map[string]PluginSettings `mapstructure:"settings" json:"settings,omitempty"`
 }
 
+// EnvProfile defines a named set of environment variables.
+// Values starting with op:// are resolved via 1Password at runtime.
+type EnvProfile struct {
+	Name      string            `mapstructure:"name"       json:"name"`
+	OPAccount string            `mapstructure:"op_account" json:"op_account,omitempty"`
+	Vars      map[string]string `mapstructure:"vars"       json:"vars,omitempty"`
+}
+
+// EnvConfig holds named environment variable profiles.
+type EnvConfig struct {
+	Profiles []EnvProfile `mapstructure:"profiles" json:"profiles,omitempty"`
+}
+
+// SSHProfile defines a named SSH config snippet written verbatim to the active SSH config file.
+type SSHProfile struct {
+	Name   string `mapstructure:"name"   json:"name"`
+	Config string `mapstructure:"config" json:"config"`
+}
+
+// SSHConfig holds named SSH config profiles.
+type SSHConfig struct {
+	Profiles []SSHProfile `mapstructure:"profiles" json:"profiles,omitempty"`
+}
+
 // Config holds all overseer configuration values.
 type Config struct {
 	Secrets      SecretsConfig      `mapstructure:"secrets"      json:"secrets,omitempty"`
 	Integrations IntegrationsConfig `mapstructure:"integrations" json:"integrations,omitempty"`
 	Plugins      PluginsConfig      `mapstructure:"plugins"      json:"plugins,omitempty"`
 	Git          GitConfig          `mapstructure:"git"          json:"git,omitempty"`
+	Env          EnvConfig          `mapstructure:"env"          json:"env,omitempty"`
+	SSH          SSHConfig          `mapstructure:"ssh"          json:"ssh,omitempty"`
 	System       SystemConfig       `mapstructure:"system"       json:"system,omitempty"`
 	Brain        BrainConfig        `mapstructure:"brain"        json:"brain,omitempty"`
 	Obsidian     ObsidianConfig     `mapstructure:"obsidian"     json:"obsidian,omitempty"`
@@ -223,6 +249,16 @@ func LocalPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "overseer", "config.local.yaml"), nil
+}
+
+// SSHActivePath returns the path to the currently active SSH config snippet.
+// This file is included in ~/.ssh/config via an Include directive (see: overseer ssh setup).
+func SSHActivePath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "overseer", "ssh-active.conf"), nil
 }
 
 // WriteBrainPluginSettings updates only the plugins.settings section of the

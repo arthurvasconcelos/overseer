@@ -24,7 +24,7 @@ type cmdGroup struct {
 var rootGroups = []cmdGroup{
 	{"Setup", []string{"setup", "brain", "brew"}},
 	{"Daily", []string{"daily", "standup", "prs", "note", "status"}},
-	{"Dev", []string{"run", "repos", "git"}},
+	{"Dev", []string{"run", "repos", "git", "env", "ssh"}},
 	{"AI", []string{"context", "mcp"}},
 	{"System", []string{"accounts", "config", "plugins", "notify", "update", "completion"}},
 }
