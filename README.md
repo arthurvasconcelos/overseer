@@ -71,17 +71,24 @@ Not everything overseer uses lives in the brain. Some directories are **referenc
 | Command | Description |
 |---|---|
 | `overseer setup` | Interactive wizard: brain, machine, dotfiles, packages |
-| `overseer brain setup` | Re-apply dotfiles and Brew packages without the wizard |
-| `overseer brain status` | Show brain directory health |
-| `overseer brain path` | Print the resolved brain path |
-| `overseer daily` | Morning briefing (Jira, Slack, Calendar) |
+| `overseer brain` | Manage the brain directory (setup, pull, push, status, path) |
+| `overseer daily` | Morning briefing (Jira, Slack, Calendar, PRs) |
+| `overseer standup` | Synthesize yesterday's activity into a standup message |
+| `overseer weekly` | Activity summary for the past 7 days |
+| `overseer focus` | Timed focus session with optional Jira time logging |
 | `overseer prs` | Open PRs across GitHub and GitLab |
 | `overseer note` | Create and search notes in Obsidian |
 | `overseer status` | Health check all integrations |
 | `overseer repos` | Manage and sync git repos |
 | `overseer git` | Apply git identity profiles |
+| `overseer env` | Manage environment variable profiles |
+| `overseer ssh` | Manage SSH config profiles |
 | `overseer brew` | Manage Homebrew packages via Brewfile |
+| `overseer context` | Print an AI-friendly description of overseer |
+| `overseer mcp` | Start MCP server for AI assistant integration |
+| `overseer plugins` | List and toggle native plugins |
 | `overseer config` | Show active config and brain path |
+| `overseer notify` | Fire a native OS desktop notification |
 | `overseer update` | Self-update the binary |
 | `overseer run` | Run a command with secrets injected |
 

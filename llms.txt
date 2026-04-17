@@ -214,6 +214,88 @@ overseer update
 ### overseer init
 Interactive wizard that creates `~/.config/overseer/config.local.yaml`.
 
+### overseer standup
+Synthesize yesterday's activity into a standup message. Pulls Jira issues updated yesterday, GitLab MRs, and GitHub PRs, then uses the configured Claude model to generate a concise standup summary.
+
+```bash
+overseer standup
+overseer standup --post   # post the summary to the configured Slack channel
+```
+
+### overseer weekly
+Activity summary for the past 7 days. Aggregates Jira issues, GitHub PRs, and GitLab MRs across all configured instances and optionally generates an AI-written narrative using Claude.
+
+```bash
+overseer weekly
+overseer weekly --ai      # generate AI narrative summary
+```
+
+### overseer focus
+Start a timed focus session. Defaults to 25 minutes. Shows a live countdown. When done (or interrupted) it can optionally log the elapsed time as a Jira worklog.
+
+```bash
+overseer focus            # 25-minute session
+overseer focus 45m        # 45-minute session
+overseer focus 1h30m      # 90-minute session
+overseer focus 90         # also 90 minutes (plain number = minutes)
+overseer focus --issue PROJECT-123 --instance work   # log time to Jira on completion
+overseer focus --name "deep work"                    # label the session
+```
+
+### overseer env
+Manage environment variable profiles. Profiles are defined in config under `secrets.environments` (name → 1Password secret environment ID). Use `eval` to apply one in the current shell.
+
+```bash
+overseer env list            # list configured profiles
+overseer env show <name>     # show variables for a profile
+eval $(overseer env use <name>)  # apply profile to current shell
+```
+
+### overseer ssh
+Manage SSH config profiles. Profiles are defined in the brain's SSH config directory. Activating a profile writes it as `~/.ssh/overseer_active.conf` (included by `~/.ssh/config` via the overseer Include directive).
+
+```bash
+overseer ssh list            # list all profiles
+overseer ssh show <name>     # print the SSH config block
+overseer ssh use <name>      # activate a profile
+overseer ssh setup           # add the Include directive to ~/.ssh/config
+```
+
+### overseer notify
+Fire a native OS desktop notification.
+
+```bash
+overseer notify "Title" "Body text"
+```
+
+### overseer context
+Print a self-contained description of overseer for use in AI assistant chats.
+
+```bash
+overseer context
+overseer context --format json
+overseer context | pbcopy   # copy to clipboard (macOS)
+```
+
+JSON output: structured command manifest with tool name, version, description, brain path, and full command tree.
+
+### overseer mcp
+Start an MCP (Model Context Protocol) server over stdio. Agent-agnostic — works with any MCP-compatible AI assistant (Claude, etc.).
+
+```bash
+overseer mcp
+```
+
+MCP tools exposed: `list_commands`, `run_prs`, `run_repos_status`, `get_config`, `run_note_search`, `run_command`.
+
+### overseer plugins
+List native plugins and their enabled/disabled state.
+
+```bash
+overseer plugins list
+overseer plugins toggle <name>   # enable or disable a plugin
+```
+
 ### overseer completion
 Generate shell completion scripts.
 
@@ -290,7 +372,9 @@ plugins:
       enabled: true   # opt-in plugin
 ```
 
-Built-in native plugins: `jira`, `slack`, `google`, `github`, `gitlab`, `obsidian`, `claude`.
+Built-in native plugins: `jira`, `slack`, `google`, `github`, `gitlab`, `obsidian`, `claude`, `devctx`.
+
+Integration plugins (`jira`, `slack`, `google`, `github`, `gitlab`) also register their own CLI commands (`overseer jira`, `overseer slack`, `overseer gcal`, `overseer github`, `overseer gitlab`). These commands only appear in help output when the corresponding integration is configured — so the help stays clean for users who don't use a given service.
 
 The `claude` plugin manages symlinks between `<brain>/claude/` and `~/.claude/` (settings, CLAUDE.md, plans, memory, hooks, skills). Run `overseer claude setup` for an interactive wizard.
 
