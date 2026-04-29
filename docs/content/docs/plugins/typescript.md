@@ -5,23 +5,25 @@ weight: 2
 
 The TypeScript SDK provides helpers for reading the overseer context and applying consistent terminal styling.
 
+[![npm](https://img.shields.io/npm/v/overseer-sdk)](https://www.npmjs.com/package/overseer-sdk)
+
 Source: [`sdk/typescript/`](https://github.com/arthurvasconcelos/overseer/tree/main/sdk/typescript)
 
 ## Install
 
 ```bash
-npm install @arthurvasconcelos/overseer-sdk
+npm install overseer-sdk
 ```
 
 ## Reading context
 
 ```typescript
-import { loadContext, getSecret } from "@arthurvasconcelos/overseer-sdk";
+import { loadContext, getSecret } from "overseer-sdk";
 
 const ctx = loadContext();
 
-console.log(ctx.version);     // overseer version string
-console.log(ctx.configPath);  // path to merged config file
+console.log(ctx.version);      // overseer version string
+console.log(ctx.config_path);  // path to merged config file
 
 // Retrieve a resolved secret declared in the sidecar manifest
 const token = getSecret(ctx, "github.personal", "token");
@@ -32,7 +34,7 @@ const token = getSecret(ctx, "github.personal", "token");
 ## Styling
 
 ```typescript
-import { styles, sectionHeader, warnLine } from "@arthurvasconcelos/overseer-sdk";
+import { sectionHeader, warnLine, okLine, errorLine } from "overseer-sdk";
 
 // Section header
 console.log(sectionHeader("Deployments", "production"));
@@ -58,15 +60,34 @@ console.log(warnLine("auth", "token expired"));
 
 All color codes use the xterm 256-color palette, which works in any modern terminal.
 
-## Example plugin
+## Hooks
+
+Use `runMain` to wire up your plugin's `daily` and `status` hooks:
 
 ```typescript
-#!/usr/bin/env ts-node
-import { loadContext, sectionHeader } from "@arthurvasconcelos/overseer-sdk";
+import { runMain, getSecret } from "overseer-sdk";
+import type { PluginContext, StatusResult } from "overseer-sdk";
+
+async function daily(ctx: PluginContext): Promise<string> {
+  const token = getSecret(ctx, "myservice", "token");
+  return "▸ My Service\n  all good\n";
+}
+
+async function status(ctx: PluginContext): Promise<StatusResult[]> {
+  return [{ name: "myservice", ok: true, message: "connected" }];
+}
+
+runMain({ daily, status });
+```
+
+## Example plugin
+
+Compile your script to a single executable (e.g. with `esbuild`), name it `overseer-myplugin`, and drop it in `brain/overseer/plugins/`.
+
+```typescript
+import { loadContext, sectionHeader } from "overseer-sdk";
 
 const ctx = loadContext();
 console.log(sectionHeader("My Plugin", ctx.version));
 // ... your plugin logic
 ```
-
-Compile to a single executable (e.g. with `esbuild` or `pkg`), name it `overseer-myplugin`, and drop it in `brain/overseer/plugins/`.

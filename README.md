@@ -3,6 +3,8 @@
 ![GitHub release](https://img.shields.io/github/v/release/arthurvasconcelos/overseer)
 ![CI](https://img.shields.io/github/actions/workflow/status/arthurvasconcelos/overseer/ci.yml?label=CI)
 ![Go version](https://img.shields.io/github/go-mod/go-version/arthurvasconcelos/overseer/main?filename=cli%2Fgo.mod)
+[![Python SDK](https://img.shields.io/pypi/v/overseer-sdk?label=python%20sdk)](https://pypi.org/project/overseer-sdk/)
+[![TypeScript SDK](https://img.shields.io/npm/v/overseer-sdk?label=typescript%20sdk)](https://www.npmjs.com/package/overseer-sdk)
 
 A personal developer CLI that unifies your daily workflow into a single binary — morning briefings, standup generation, focus sessions, git identities, repo management, notes, PR reviews, env/SSH profiles, Homebrew, and AI assistant integration.
 
@@ -133,7 +135,12 @@ See [brain-example/overseer/config.yaml.example](brain-example/overseer/config.y
 
 Drop `overseer-<name>` executables in `brain/overseer/plugins/` (or anywhere on `PATH`) and they are automatically registered as `overseer <name>` subcommands.
 
-See [brain-example/overseer/plugins/README.md](brain-example/overseer/plugins/README.md) and the [sdk/](sdk/) directory for Python and TypeScript helpers.
+See [brain-example/overseer/plugins/README.md](brain-example/overseer/plugins/README.md) for a full example. SDKs are available to simplify building plugins:
+
+| SDK | Install |
+|-----|---------|
+| Python | `pip install overseer-sdk` |
+| TypeScript | `npm install overseer-sdk` |
 
 ---
 

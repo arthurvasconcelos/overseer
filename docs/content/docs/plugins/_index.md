@@ -83,6 +83,6 @@ Plugin SDKs are available for Python and TypeScript to simplify reading context 
 
 {{< cards >}}
   {{< card link="/docs/plugins/python" title="Python SDK" subtitle="pip install overseer-sdk" >}}
-  {{< card link="/docs/plugins/typescript" title="TypeScript SDK" subtitle="npm install @arthurvasconcelos/overseer-sdk" >}}
+  {{< card link="/docs/plugins/typescript" title="TypeScript SDK" subtitle="npm install overseer-sdk" >}}
   {{< card link="/docs/plugins/native" title="Native plugins" subtitle="Built-in plugin reference" >}}
 {{< /cards >}}

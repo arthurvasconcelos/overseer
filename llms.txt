@@ -394,7 +394,7 @@ Any binary named `overseer-<name>` on PATH or in `brain/overseer/plugins/` is re
 
 External plugins that declare `"hooks": ["daily"]` are called with the `daily` argument during `overseer daily` (stdout printed as a section). Those that declare `"hooks": ["status"]` are called with `status` and must output a JSON array of `{"name","ok","message"}` items.
 
-Plugin SDKs are available for Python (`sdk/python/`) and TypeScript (`sdk/typescript/`) in the overseer repository.
+Plugin SDKs are published to PyPI (`pip install overseer-sdk`) and npm (`npm install overseer-sdk`). Source lives in `sdk/python/` and `sdk/typescript/`.
 
 ---
 

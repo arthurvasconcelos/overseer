@@ -1,6 +1,6 @@
 {
   "name": "overseer-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "TypeScript SDK for building Overseer plugins",
   "type": "module",
   "main": "dist/index.js",
@@ -10,6 +10,9 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     }
+  },
+  "engines": {
+    "node": ">=18"
   },
   "files": [
     "dist",

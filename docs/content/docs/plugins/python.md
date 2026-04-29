@@ -5,6 +5,8 @@ weight: 1
 
 The Python SDK provides helpers for reading the overseer context and applying consistent terminal styling.
 
+[![PyPI](https://img.shields.io/pypi/v/overseer-sdk)](https://pypi.org/project/overseer-sdk/)
+
 Source: [`sdk/python/`](https://github.com/arthurvasconcelos/overseer/tree/main/sdk/python)
 
 ## Install
@@ -32,14 +34,14 @@ token = ctx.secret("github.personal", "token")
 ## Styling
 
 ```python
-from overseer_sdk import styles
+from overseer_sdk import section_header, warn_line, ok_line, error_line
 
 # Section header
-print(styles.section_header("Deployments", "production"))
+print(section_header("Deployments", "production"))
 # → ▸ Deployments  ·  production
 
 # Warning line
-print(styles.warn_line("auth", "token expired"))
+print(warn_line("auth", "token expired"))
 # → ⚠  auth: token expired
 ```
 
@@ -58,15 +60,33 @@ print(styles.warn_line("auth", "token expired"))
 
 All color codes use the xterm 256-color palette, which works in any modern terminal.
 
+## Hooks
+
+Use `run_main` to wire up your plugin's `daily` and `status` hooks:
+
+```python
+from overseer_sdk import PluginContext, StatusResult, run_main
+
+def daily(ctx: PluginContext) -> str:
+    token = ctx.secret("myservice", "token")
+    return "▸ My Service\n  all good\n"
+
+def status(ctx: PluginContext) -> list[StatusResult]:
+    return [StatusResult(name="myservice", ok=True, message="connected")]
+
+if __name__ == "__main__":
+    run_main(daily_fn=daily, status_fn=status)
+```
+
 ## Example plugin
+
+Make the file executable and name it `overseer-myplugin`, then drop it in `brain/overseer/plugins/`.
 
 ```python
 #!/usr/bin/env python3
-from overseer_sdk import PluginContext, styles
+from overseer_sdk import PluginContext, section_header
 
 ctx = PluginContext.from_env()
-print(styles.section_header("My Plugin", ctx.version))
+print(section_header("My Plugin", ctx.version))
 # ... your plugin logic
 ```
-
-Make the file executable and name it `overseer-myplugin`, then drop it in `brain/overseer/plugins/`.
