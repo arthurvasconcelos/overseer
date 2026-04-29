@@ -32,4 +32,4 @@ jobs:
         working-directory: sdk/typescript
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public
+        run: npm publish

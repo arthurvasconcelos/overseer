@@ -1,5 +1,5 @@
 {
-  "name": "@overseer/sdk",
+  "name": "overseer-sdk",
   "version": "0.1.0",
   "description": "TypeScript SDK for building Overseer plugins",
   "type": "module",
@@ -11,6 +11,10 @@
       "types": "./dist/index.d.ts"
     }
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run"

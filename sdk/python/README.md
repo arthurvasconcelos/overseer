@@ -176,4 +176,4 @@ Secrets listed in the manifest are pre-resolved (including `op://` 1Password ref
 ## Links
 
 - [overseer](https://github.com/arthurvasconcelos/overseer) — the main CLI
-- [TypeScript SDK](https://www.npmjs.com/package/@overseer/sdk) — same SDK for TypeScript plugins
+- [TypeScript SDK](https://www.npmjs.com/package/overseer-sdk) — same SDK for TypeScript plugins

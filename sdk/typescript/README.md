@@ -1,7 +1,7 @@
 # @overseer/sdk (TypeScript)
 
-[![npm](https://img.shields.io/npm/v/@overseer/sdk)](https://www.npmjs.com/package/@overseer/sdk)
-[![Node](https://img.shields.io/node/v/@overseer/sdk)](https://www.npmjs.com/package/@overseer/sdk)
+[![npm](https://img.shields.io/npm/v/overseer-sdk)](https://www.npmjs.com/package/overseer-sdk)
+[![Node](https://img.shields.io/node/v/overseer-sdk)](https://www.npmjs.com/package/overseer-sdk)
 [![Tests](https://img.shields.io/github/actions/workflow/status/arthurvasconcelos/overseer/ci.yml?branch=main&label=tests)](https://github.com/arthurvasconcelos/overseer/actions/workflows/ci.yml)
 
 TypeScript SDK for building external plugins for [overseer](https://github.com/arthurvasconcelos/overseer) — a personal developer CLI that unifies daily workflows.
@@ -19,7 +19,7 @@ This SDK gives you the context, helpers, and styling primitives to write those p
 ## Install
 
 ```bash
-npm install @overseer/sdk
+npm install overseer-sdk
 ```
 
 ---
@@ -28,8 +28,8 @@ npm install @overseer/sdk
 
 ```typescript
 #!/usr/bin/env node
-import { loadContext, runMain, sectionHeader, okLine } from "@overseer/sdk";
-import type { PluginContext, StatusResult } from "@overseer/sdk";
+import { loadContext, runMain, sectionHeader, okLine } from "overseer-sdk";
+import type { PluginContext, StatusResult } from "overseer-sdk";
 
 async function daily(ctx: PluginContext): Promise<string> {
   const token = getSecret(ctx, "myservice", "token");
@@ -139,7 +139,7 @@ const results: StatusResult[] = [
 Fire a native desktop notification via `overseer notify`.
 
 ```typescript
-import { notify } from "@overseer/sdk";
+import { notify } from "overseer-sdk";
 
 notify("Deploy done", "my-service v1.2.3 is live");
 notify("Build failed", "see CI logs", "my-repo");
@@ -158,7 +158,7 @@ import {
   okLine,         // "✓  label: message"
   warnLine,       // "⚠  label: message"
   errorLine,      // "✗  label: message"
-} from "@overseer/sdk";
+} from "overseer-sdk";
 
 console.log(sectionHeader("GitHub", "3 open PRs"));
 console.log(okLine("auth", "user@example.com"));
