@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from "vitest";
 import { runMain } from "../plugin.js";
 import type { StatusResult } from "../plugin.js";
 
@@ -15,10 +15,14 @@ class ExitError extends Error {
 }
 
 describe("runMain", () => {
-  let stdoutSpy: ReturnType<typeof vi.spyOn>;
-  let consoleSpy: ReturnType<typeof vi.spyOn>;
-  let stderrSpy: ReturnType<typeof vi.spyOn>;
-  let exitSpy: ReturnType<typeof vi.spyOn>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let stdoutSpy: MockInstance<any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let consoleSpy: MockInstance<any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let stderrSpy: MockInstance<any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let exitSpy: MockInstance<any>;
 
   beforeEach(() => {
     process.env.OVERSEER_CONTEXT = CTX_JSON;
@@ -26,7 +30,7 @@ describe("runMain", () => {
     consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     exitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
-      throw new ExitError(code ?? 0);
+      throw new ExitError(Number(code ?? 0));
     });
   });
 
@@ -67,7 +71,7 @@ describe("runMain", () => {
       { name: "jira", ok: false, message: "unreachable" },
     ];
     await runMain({ status: async () => results });
-    const printed = JSON.parse((consoleSpy.mock.calls[0] as string[][])[0]);
+    const printed = JSON.parse(consoleSpy.mock.calls[0][0] as string);
     expect(printed).toHaveLength(2);
     expect(printed[1]).toMatchObject({ name: "jira", ok: false });
   });
