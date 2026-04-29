@@ -233,12 +233,21 @@
           "type": "string"
         },
         "token": {
-          "description": "Slack bot OAuth token. Accepts an op:// reference.",
+          "description": "Slack bot OAuth token (xoxb-). Used for sending messages. Accepts an op:// reference.",
+          "type": "string"
+        },
+        "user_token": {
+          "description": "Slack user OAuth token (xoxp-). Used for searching mentions via the Search API — sees all channels the user is in, without needing the bot to be a member. Requires search:read scope. Accepts an op:// reference.",
           "type": "string"
         },
         "op_account": {
           "description": "1Password account ID to use when resolving op:// references.",
           "type": "string"
+        },
+        "group_handles": {
+          "description": "Slack usergroup handles you are a member of (without @), e.g. [\"backend-team\", \"frontend-team\"]. Messages that mention these groups are included in your mentions.",
+          "type": "array",
+          "items": { "type": "string" }
         }
       }
     },

@@ -9,12 +9,21 @@ import (
 
 // Client wraps the slack-go client.
 type Client struct {
-	api *slack.Client
+	api      *slack.Client
+	userAPI  *slack.Client // optional — user token for search
 }
 
 // New creates a Slack client using a bot token.
 func New(token string) *Client {
 	return &Client{api: slack.New(token)}
+}
+
+// NewWithUserToken creates a Slack client with both a bot token and a user token.
+func NewWithUserToken(token, userToken string) *Client {
+	return &Client{
+		api:     slack.New(token),
+		userAPI: slack.New(userToken),
+	}
 }
 
 // Mention represents a message where the bot user was mentioned.
@@ -33,15 +42,65 @@ func (c *Client) Ping() (string, error) {
 	return info.User, nil
 }
 
-// Mentions returns recent messages that mention the bot user across all
-// channels it is a member of. Only one page of history per channel is
-// fetched to stay well within Slack rate limits.
-func (c *Client) Mentions() ([]Mention, error) {
+// Mentions returns recent messages that mention the user or any of the given
+// usergroup handles. When a user token is configured it uses the Search API
+// (sees all channels); otherwise falls back to scanning bot-joined channels.
+func (c *Client) Mentions(groupHandles []string) ([]Mention, error) {
+	if c.userAPI != nil {
+		return c.searchMentions(groupHandles)
+	}
+	return c.scanMentions(groupHandles)
+}
+
+// searchMentions uses the Slack Search API (requires user token + search:read).
+func (c *Client) searchMentions(groupHandles []string) ([]Mention, error) {
+	info, err := c.userAPI.AuthTest()
+	if err != nil {
+		return nil, fmt.Errorf("slack: user auth test: %w", err)
+	}
+	queries := []string{"@" + info.User}
+	for _, h := range groupHandles {
+		queries = append(queries, "@"+h)
+	}
+
+	seen := map[string]bool{}
+	var mentions []Mention
+	for _, q := range queries {
+		result, err := c.userAPI.SearchMessages(q, slack.SearchParameters{Count: 20})
+		if err != nil {
+			return nil, fmt.Errorf("slack: search %q: %w", q, err)
+		}
+		for _, msg := range result.Matches {
+			key := msg.Channel.ID + msg.Timestamp
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			name := msg.Channel.Name
+			if name == "" {
+				name = msg.Channel.ID
+			}
+			mentions = append(mentions, Mention{
+				Channel: name,
+				Text:    truncate(msg.Text, 100),
+			})
+		}
+	}
+	return mentions, nil
+}
+
+// scanMentions scans history of bot-joined channels (fallback when no user token).
+func (c *Client) scanMentions(groupHandles []string) ([]Mention, error) {
 	info, err := c.api.AuthTest()
 	if err != nil {
 		return nil, fmt.Errorf("slack: auth test: %w", err)
 	}
 	userID := info.UserID
+
+	groupIDs, err := c.resolveGroupIDs(groupHandles)
+	if err != nil {
+		groupIDs = nil
+	}
 
 	channels, _, err := c.api.GetConversations(&slack.GetConversationsParameters{
 		Types:           []string{"public_channel", "private_channel", "im", "mpim"},
@@ -67,12 +126,12 @@ func (c *Client) Mentions() ([]Mention, error) {
 		if err != nil {
 			continue
 		}
+		name := ch.Name
+		if name == "" {
+			name = ch.ID
+		}
 		for _, msg := range history.Messages {
-			if strings.Contains(msg.Text, "<@"+userID+">") {
-				name := ch.Name
-				if name == "" {
-					name = ch.ID
-				}
+			if isMentioned(msg.Text, userID, groupIDs) {
 				mentions = append(mentions, Mention{
 					Channel: name,
 					Text:    truncate(msg.Text, 100),
@@ -80,8 +139,44 @@ func (c *Client) Mentions() ([]Mention, error) {
 			}
 		}
 	}
-
 	return mentions, nil
+}
+
+// isMentioned reports whether a message text contains a direct user mention
+// or a mention of any of the given usergroup IDs.
+func isMentioned(text, userID string, groupIDs []string) bool {
+	if strings.Contains(text, "<@"+userID+">") {
+		return true
+	}
+	for _, gid := range groupIDs {
+		if strings.Contains(text, "<!subteam^"+gid) {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveGroupIDs maps a list of usergroup handle names to their Slack IDs.
+// Handles that are not found are silently skipped.
+func (c *Client) resolveGroupIDs(handles []string) ([]string, error) {
+	if len(handles) == 0 {
+		return nil, nil
+	}
+	groups, err := c.api.GetUserGroups()
+	if err != nil {
+		return nil, fmt.Errorf("slack: listing usergroups: %w", err)
+	}
+	want := make(map[string]bool, len(handles))
+	for _, h := range handles {
+		want[h] = true
+	}
+	var ids []string
+	for _, g := range groups {
+		if want[g.Handle] {
+			ids = append(ids, g.ID)
+		}
+	}
+	return ids, nil
 }
 
 // Channel is a minimal representation of a Slack channel the bot is a member of.

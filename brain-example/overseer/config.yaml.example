@@ -18,8 +18,11 @@
 #
 #   slack:
 #     - name: work
-#       token: op://Vault/Slack Bot Token/credential
+#       token: op://Vault/Slack Bot Token/credential       # xoxb- bot token (for sending)
+#       user_token: op://Vault/Slack User Token/credential # xoxp- user token (for searching mentions)
 #       op_account: <1password-account-id>
+#       group_handles:                                     # usergroup handles you're a member of
+#         - backend-team
 #
 #   github:
 #     - name: personal

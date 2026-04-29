@@ -63,14 +63,12 @@ func statusChecks(cfg *config.Config) []nativeplugin.StatusCheckFn {
 }
 
 func printSlack(ws config.SlackWorkspace, w *bytes.Buffer) error {
-	token, err := secrets.ReadAs(ws.Token, ws.OPAccount)
+	client, err := buildClient(ws)
 	if err != nil {
 		return err
 	}
 
-	client := slackclient.New(token)
-
-	mentions, err := client.Mentions()
+	mentions, err := client.Mentions(ws.GroupHandles)
 	if err != nil {
 		return err
 	}
@@ -79,9 +77,16 @@ func printSlack(ws config.SlackWorkspace, w *bytes.Buffer) error {
 	if len(mentions) == 0 {
 		fmt.Fprintln(w, "  "+tui.StyleMuted.Render("no recent mentions"))
 	} else {
-		for _, m := range mentions {
+		shown := mentions
+		if len(shown) > 5 {
+			shown = shown[:5]
+		}
+		for _, m := range shown {
 			channel := tui.StyleAccent.Render("#" + m.Channel)
 			fmt.Fprintf(w, "  %-30s  %s\n", channel, tui.StyleNormal.Render(m.Text))
+		}
+		if len(mentions) > 5 {
+			fmt.Fprintln(w, "  "+tui.StyleMuted.Render(fmt.Sprintf("…and %d more — run: overseer slack mentions", len(mentions)-5)))
 		}
 	}
 	fmt.Fprintln(w)

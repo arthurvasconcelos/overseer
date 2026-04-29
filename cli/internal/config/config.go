@@ -142,9 +142,11 @@ type JiraInstance struct {
 // Token is an op:// reference resolved at runtime via secrets.Get.
 // OPAccount is the 1Password account ID to use (see: overseer accounts).
 type SlackWorkspace struct {
-	Name      string `mapstructure:"name"       json:"name"`
-	Token     string `mapstructure:"token"      json:"token"`                // op:// reference
-	OPAccount string `mapstructure:"op_account" json:"op_account,omitempty"` // optional 1Password account ID
+	Name         string   `mapstructure:"name"          json:"name"`
+	Token        string   `mapstructure:"token"         json:"token"`                   // op:// reference — bot token (xoxb-) for sending
+	UserToken    string   `mapstructure:"user_token"    json:"user_token,omitempty"`    // op:// reference — user token (xoxp-) for searching mentions
+	OPAccount    string   `mapstructure:"op_account"    json:"op_account,omitempty"`    // optional 1Password account ID
+	GroupHandles []string `mapstructure:"group_handles" json:"group_handles,omitempty"` // usergroup handles to watch (e.g. "backend-team")
 }
 
 // GoogleAccount configures a single Google account for Calendar access.

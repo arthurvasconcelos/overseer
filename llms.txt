@@ -335,7 +335,7 @@ Top-level config keys:
 |-----|-------------|
 | `secrets.environments` | Map of alias → 1Password account ID |
 | `integrations.jira[]` | Jira instances (name, base_url, email, token, op_account) |
-| `integrations.slack[]` | Slack workspaces (name, token, op_account) |
+| `integrations.slack[]` | Slack workspaces (name, token, op_account, user_token, group_handles) |
 | `integrations.google[]` | Google accounts (name, credentials_doc, op_account) |
 | `integrations.github[]` | GitHub accounts (name, token, op_account) |
 | `integrations.gitlab[]` | GitLab instances (name, base_url, token, op_account) |

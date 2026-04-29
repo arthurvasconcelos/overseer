@@ -125,7 +125,7 @@ func writeContextMarkdown(w io.Writer) {
 	fmt.Fprintln(w, "|-----|-------------|")
 	fmt.Fprintln(w, "| `secrets.environments` | Map of alias → 1Password account ID |")
 	fmt.Fprintln(w, "| `integrations.jira[]` | Jira instances (name, base_url, email, token, op_account) |")
-	fmt.Fprintln(w, "| `integrations.slack[]` | Slack workspaces (name, token, op_account) |")
+	fmt.Fprintln(w, "| `integrations.slack[]` | Slack workspaces (name, token, op_account, user_token, group_handles) |")
 	fmt.Fprintln(w, "| `integrations.google[]` | Google accounts (name, credentials_doc, op_account) |")
 	fmt.Fprintln(w, "| `integrations.github[]` | GitHub accounts (name, token, op_account) |")
 	fmt.Fprintln(w, "| `integrations.gitlab[]` | GitLab instances (name, base_url, token, op_account) |")

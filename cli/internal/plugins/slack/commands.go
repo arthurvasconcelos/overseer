@@ -62,6 +62,13 @@ func buildClient(ws config.SlackWorkspace) (*slackclient.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolving token: %w", err)
 	}
+	if ws.UserToken != "" {
+		userToken, err := secrets.ReadAs(ws.UserToken, ws.OPAccount)
+		if err != nil {
+			return nil, fmt.Errorf("resolving user_token: %w", err)
+		}
+		return slackclient.NewWithUserToken(token, userToken), nil
+	}
 	return slackclient.New(token), nil
 }
 
@@ -82,7 +89,7 @@ func mentionsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			mentions, err := client.Mentions()
+			mentions, err := client.Mentions(ws.GroupHandles)
 			if err != nil {
 				return err
 			}
