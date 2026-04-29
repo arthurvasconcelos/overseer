@@ -1,0 +1,30 @@
+name: Publish Python SDK
+
+on:
+  push:
+    tags:
+      - "python-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: Deploy
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build
+        working-directory: sdk/python
+        run: uv build
+
+      - name: Publish
+        working-directory: sdk/python
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: uv publish

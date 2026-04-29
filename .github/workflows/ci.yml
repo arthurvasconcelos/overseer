@@ -7,7 +7,7 @@ on:
     branches: ["main"]
 
 jobs:
-  build-and-test:
+  go:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,3 +23,41 @@ jobs:
       - name: Test
         working-directory: cli
         run: go test ./...
+
+  python-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Test
+        working-directory: sdk/python
+        run: uv run --with pytest pytest tests/
+
+      - name: Build
+        working-directory: sdk/python
+        run: uv build
+
+  typescript-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install
+        working-directory: sdk/typescript
+        run: npm ci
+
+      - name: Test
+        working-directory: sdk/typescript
+        run: npm test
+
+      - name: Build
+        working-directory: sdk/typescript
+        run: npm run build
