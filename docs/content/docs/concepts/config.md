@@ -83,7 +83,7 @@ integrations:
 |---|---|
 | `integrations.jira[]` | `name`, `base_url`, `email`, `token`, `op_account` |
 | `integrations.slack[]` | `name`, `token`, `op_account`, `user_token` (optional, for search), `group_handles` (optional, usergroup handles to watch) |
-| `integrations.google[]` | `name`, `credentials_doc`, `op_account` |
+| `integrations.google[]` | `name`, `credentials_doc`, `op_account` — run `overseer gcal auth` once per account to cache the OAuth token |
 | `integrations.github[]` | `name`, `token`, `op_account` |
 | `integrations.gitlab[]` | `name`, `base_url`, `token`, `op_account` |
 

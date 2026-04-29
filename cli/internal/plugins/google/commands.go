@@ -22,6 +22,7 @@ func commands(cfg *config.Config) []*cobra.Command {
 		Annotations: map[string]string{"overseer/group": "Daily"},
 	}
 	root.PersistentFlags().StringVar(&accountFlag, "account", "", "Google account name (auto-selects if only one configured)")
+	root.AddCommand(authCmd())
 	root.AddCommand(todayCmd())
 	root.AddCommand(weekCmd())
 	root.AddCommand(nextCmd())
@@ -83,6 +84,33 @@ func printEvents(events []gcal.Event, showDate bool) {
 		} else {
 			fmt.Printf("  %s  %s\n", timeCol, title)
 		}
+	}
+}
+
+func authCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "auth",
+		Short: "Authenticate with Google Calendar (run once per account)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			acc, err := resolveAccount(cfg, accountFlag)
+			if err != nil {
+				return err
+			}
+			credsJSON, err := secrets.ReadAs(acc.CredentialsDoc, acc.OPAccount)
+			if err != nil {
+				return fmt.Errorf("resolving credentials: %w", err)
+			}
+			if err := gcal.Authenticate(ctx, []byte(credsJSON), acc.Name); err != nil {
+				return err
+			}
+			fmt.Println(tui.StyleOK.Render("✓") + "  authenticated — token saved for " + acc.Name)
+			return nil
+		},
 	}
 }
 

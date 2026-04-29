@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -64,6 +65,11 @@ func New(ctx context.Context, credentialsJSON []byte, accountName string) (*Clie
 
 	svc, err := googlecalendar.NewService(ctx, option.WithHTTPClient(httpClient))
 	if err != nil {
+		if isStaleToken(err) {
+			tokenFile, _ := tokenPath(accountName)
+			_ = os.Remove(tokenFile)
+			return nil, ErrNoToken
+		}
 		return nil, fmt.Errorf("gcal: creating service: %w", err)
 	}
 
@@ -112,6 +118,9 @@ func (c *Client) WeekEvents(ctx context.Context) ([]Event, error) {
 		OrderBy("startTime").
 		Do()
 	if err != nil {
+		if isStaleToken(err) {
+			return nil, ErrNoToken
+		}
 		return nil, fmt.Errorf("gcal: listing events: %w", err)
 	}
 
@@ -145,6 +154,9 @@ func (c *Client) NextEvent(ctx context.Context) (*Event, error) {
 		MaxResults(1).
 		Do()
 	if err != nil {
+		if isStaleToken(err) {
+			return nil, ErrNoToken
+		}
 		return nil, fmt.Errorf("gcal: listing events: %w", err)
 	}
 	if len(result.Items) == 0 {
@@ -177,6 +189,9 @@ func (c *Client) TodaysEvents(ctx context.Context) ([]Event, error) {
 		OrderBy("startTime").
 		Do()
 	if err != nil {
+		if isStaleToken(err) {
+			return nil, ErrNoToken
+		}
 		return nil, fmt.Errorf("gcal: listing events: %w", err)
 	}
 
@@ -214,45 +229,56 @@ func extractJoinURL(item *googlecalendar.Event) string {
 	return ""
 }
 
+// ErrNoToken is returned when no cached token exists and auth must be run explicitly.
+var ErrNoToken = fmt.Errorf("gcal: not authenticated — run: overseer gcal auth")
+
 func httpClientFromConfig(ctx context.Context, cfg *oauth2.Config, accountName string) (*http.Client, error) {
 	tokenFile, err := tokenPath(accountName)
 	if err != nil {
 		return nil, err
 	}
-
 	token, err := loadToken(tokenFile)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil, fmt.Errorf("gcal: loading cached token: %w", err)
+		if os.IsNotExist(err) {
+			return nil, ErrNoToken
 		}
-		// No cached token yet — run the browser consent flow.
-		token, err = runAuthFlow(ctx, cfg)
-		if err != nil {
-			return nil, err
-		}
-		if err := saveToken(tokenFile, token); err != nil {
-			return nil, err
-		}
+		return nil, fmt.Errorf("gcal: loading cached token: %w", err)
 	}
-
 	return cfg.Client(ctx, token), nil
 }
 
-func runAuthFlow(ctx context.Context, cfg *oauth2.Config) (*oauth2.Token, error) {
+// isStaleToken reports whether err indicates an invalid or revoked token.
+func isStaleToken(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "invalid_grant") || strings.Contains(msg, "invalid_token")
+}
+
+// Authenticate runs the interactive OOB auth flow and caches the resulting token.
+func Authenticate(ctx context.Context, credentialsJSON []byte, accountName string) error {
+	cfg, err := google.ConfigFromJSON(credentialsJSON, googlecalendar.CalendarReadonlyScope)
+	if err != nil {
+		return fmt.Errorf("gcal: parsing credentials: %w", err)
+	}
 	cfg.RedirectURL = "urn:ietf:wg:oauth:2.0:oob"
 	url := cfg.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("\nOpen this URL in your browser to authorize Google Calendar access:\n\n  %s\n\nPaste the authorization code: ", url)
 
 	var code string
 	if _, err := fmt.Scan(&code); err != nil {
-		return nil, fmt.Errorf("gcal: reading auth code: %w", err)
+		return fmt.Errorf("gcal: reading auth code: %w", err)
 	}
-
 	token, err := cfg.Exchange(ctx, code)
 	if err != nil {
-		return nil, fmt.Errorf("gcal: exchanging auth code: %w", err)
+		return fmt.Errorf("gcal: exchanging auth code: %w", err)
 	}
-	return token, nil
+	tokenFile, err := tokenPath(accountName)
+	if err != nil {
+		return err
+	}
+	return saveToken(tokenFile, token)
 }
 
 func loadToken(path string) (*oauth2.Token, error) {
