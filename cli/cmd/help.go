@@ -23,8 +23,8 @@ type cmdGroup struct {
 // Any command not listed here and without an annotation falls through to an "Other" section.
 var rootGroups = []cmdGroup{
 	{"Setup", []string{"setup", "brain", "brew"}},
-	{"Daily", []string{"daily", "standup", "weekly", "prs", "note", "status", "focus"}},
-	{"Dev", []string{"run", "repos", "git", "env", "ssh"}},
+	{"Daily", []string{"daily", "standup", "gcal", "prs", "focus", "note", "weekly", "status"}},
+	{"Dev", []string{"git", "repos", "github", "gitlab", "jira", "slack", "docker", "kube", "env", "ssh", "run"}},
 	{"AI", []string{"context", "mcp"}},
 	{"System", []string{"accounts", "config", "plugins", "notify", "update", "completion"}},
 }
@@ -122,8 +122,23 @@ func printRootCommands(cmd *cobra.Command) {
 	}
 
 	rendered := map[string]bool{}
+
+	// Fill static group commands first so rootGroups defines the ordering.
+	for i, rg := range rootGroups {
+		for _, name := range rg.commands {
+			if c, ok := byName[name]; ok {
+				groups[i].cmds = append(groups[i].cmds, c)
+				rendered[name] = true
+			}
+		}
+	}
+
+	// Append any annotation-based commands not already placed by the static list.
 	var newGroupNames []string
 	for name, c := range byName {
+		if rendered[name] {
+			continue
+		}
 		g := c.Annotations["overseer/group"]
 		if g == "" {
 			continue
@@ -135,16 +150,6 @@ func printRootCommands(cmd *cobra.Command) {
 			groupIndex[g] = len(groups)
 			groups = append(groups, resolvedGroup{title: g, cmds: []*cobra.Command{c}})
 			newGroupNames = append(newGroupNames, g)
-		}
-	}
-
-	// Fill static group commands and mark rendered.
-	for i, rg := range rootGroups {
-		for _, name := range rg.commands {
-			if c, ok := byName[name]; ok {
-				groups[i].cmds = append(groups[i].cmds, c)
-				rendered[name] = true
-			}
 		}
 	}
 

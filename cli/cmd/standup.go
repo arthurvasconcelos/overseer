@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -55,6 +57,8 @@ func runStandup(_ *cobra.Command, _ []string) error {
 	// --- What I did ---
 	sb.WriteString(tui.StyleAccent.Render("What I did") + "\n")
 
+	stopSpinner := tui.StartSpinner("fetching activity…")
+
 	// Jira: issues moved to Done or In Review since yesterday.
 	doneStatuses := []string{"Done", "In Review", "Code Review", "Resolved", "Closed"}
 	anyJira := false
@@ -92,6 +96,19 @@ func runStandup(_ *cobra.Command, _ []string) error {
 			anyCommit = true
 		}
 	}
+	for _, dir := range cfg.RepoDirs {
+		dir = expandHome(dir)
+		discovered := discoverRepos(dir)
+		for _, repoPath := range discovered {
+			rel, _ := filepath.Rel(dir, repoPath)
+			commits := gitCommitsSince(repoPath, since, profileEmails)
+			for _, c := range commits {
+				sb.WriteString(fmt.Sprintf("  • [%s] %s\n", rel, c))
+				anyCommit = true
+			}
+		}
+	}
+	stopSpinner()
 
 	if !anyJira && !anyCommit {
 		sb.WriteString(tui.StyleMuted.Render("  (nothing found)") + "\n")
@@ -99,12 +116,29 @@ func runStandup(_ *cobra.Command, _ []string) error {
 	sb.WriteString("\n")
 
 	// --- What I'm doing ---
+	doing, err := tui.Prompt("What I'm doing today", "", "leave blank to skip")
+	if err != nil {
+		return err
+	}
 	sb.WriteString(tui.StyleAccent.Render("What I'm doing") + "\n")
-	sb.WriteString(tui.StyleMuted.Render("  (fill in manually)") + "\n\n")
+	if doing == "" || doing == "leave blank to skip" {
+		sb.WriteString(tui.StyleMuted.Render("  (fill in manually)") + "\n")
+	} else {
+		sb.WriteString(fmt.Sprintf("  %s\n", doing))
+	}
+	sb.WriteString("\n")
 
 	// --- Blockers ---
+	blockers, err := tui.Prompt("Any blockers?", "", "leave blank if none")
+	if err != nil {
+		return err
+	}
 	sb.WriteString(tui.StyleAccent.Render("Blockers") + "\n")
-	sb.WriteString(tui.StyleMuted.Render("  (none)") + "\n")
+	if blockers == "" || blockers == "leave blank if none" {
+		sb.WriteString(tui.StyleMuted.Render("  (none)") + "\n")
+	} else {
+		sb.WriteString(fmt.Sprintf("  %s\n", blockers))
+	}
 
 	output := sb.String()
 	fmt.Print(output)
@@ -207,3 +241,49 @@ func stripANSI(s string) string {
 	return out.String()
 }
 
+// expandHome replaces a leading ~ with the user's home directory.
+func expandHome(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return filepath.Join(home, path[2:])
+	}
+	return path
+}
+
+// discoverRepos recursively walks dir and returns the absolute paths of all git
+// repo roots found under it. dir itself is excluded even if it contains .git.
+// Stops descending into a directory once a .git entry is found (repo root).
+func discoverRepos(dir string) []string {
+	var repos []string
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return repos
+	}
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		walkRepos(filepath.Join(dir, e.Name()), &repos)
+	}
+	return repos
+}
+
+func walkRepos(dir string, repos *[]string) {
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+		*repos = append(*repos, dir)
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		walkRepos(filepath.Join(dir, e.Name()), repos)
+	}
+}

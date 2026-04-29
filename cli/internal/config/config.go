@@ -72,6 +72,7 @@ type Config struct {
 	Obsidian     ObsidianConfig     `mapstructure:"obsidian"     json:"obsidian,omitempty"`
 	Brew         BrewConfig         `mapstructure:"brew"         json:"brew,omitempty"`
 	Repos        []RepoConfig       `mapstructure:"repos"        json:"repos,omitempty"`
+	RepoDirs     []string           `mapstructure:"repo_dirs"    json:"repo_dirs,omitempty"`
 }
 
 // RepoConfig defines a managed repository.

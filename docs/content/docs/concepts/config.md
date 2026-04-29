@@ -201,3 +201,14 @@ repos:
 | `path` | Local path (absolute or `~`-prefixed) |
 | `git_profile` | Git identity to apply |
 | `readonly` | If `true`, `repos pull` skips this repo |
+
+### `repo_dirs`
+
+Directories to auto-discover git repositories from. Overseer recursively walks each listed directory and treats every subdirectory containing a `.git` folder as a repo root. The listed directory itself is excluded even if it has `.git`. Useful for large, externally-managed repo trees (e.g. a company workspace cloned by a plugin).
+
+```yaml
+repo_dirs:
+  - ~/repos/p24          # all repos under this tree are picked up automatically
+```
+
+Used by: `overseer standup` (commit history).

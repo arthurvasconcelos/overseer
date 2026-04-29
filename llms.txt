@@ -352,6 +352,7 @@ Top-level config keys:
 | `obsidian.templates_folder` | Folder for note templates |
 | `brew.brewfile` | Brewfile path relative to repos_path |
 | `repos[]` | Managed repos (name, url, path, readonly, git_profile) |
+| `repo_dirs[]` | Directories auto-scanned for git repos (used by standup) |
 
 ---
 

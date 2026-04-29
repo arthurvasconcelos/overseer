@@ -609,6 +609,9 @@ const brainConfigExample = `# overseer configuration
 #     path: repos/my-project
 #     git_profile: personal
 
+# repo_dirs:
+#   - ~/repos/work
+
 # obsidian:
 #   vault_path: /absolute/path/to/your/vault
 #   vault_name: MyVault

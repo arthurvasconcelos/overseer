@@ -58,6 +58,12 @@
 #     git_profile: work
 #     readonly: true
 
+# --- Auto-discovered repo directories ---
+# Directories whose subdirectories are recursively scanned for git repos.
+# The directory itself is excluded. Used by: overseer standup.
+# repo_dirs:
+#   - ~/repos/work       # e.g. a large company workspace managed by an external plugin
+
 # --- Obsidian vault (referenced, not owned by brain) ---
 # obsidian:
 #   vault_path: /absolute/path/to/your/vault

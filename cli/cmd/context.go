@@ -142,6 +142,7 @@ func writeContextMarkdown(w io.Writer) {
 	fmt.Fprintln(w, "| `obsidian.templates_folder` | Folder for note templates |")
 	fmt.Fprintln(w, "| `brew.brewfile` | Brewfile path relative to repos_path |")
 	fmt.Fprintln(w, "| `repos[]` | Managed repos (name, url, path, readonly, git_profile) |")
+	fmt.Fprintln(w, "| `repo_dirs[]` | Directories auto-scanned for git repos (used by standup) |")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "## Plugin system")
 	fmt.Fprintln(w)

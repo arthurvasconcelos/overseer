@@ -179,6 +179,14 @@
       "description": "List of git repositories managed by overseer. Used by: overseer repos status/pull.",
       "type": "array",
       "items": { "$ref": "#/$defs/repoConfig" }
+    },
+    "repo_dirs": {
+      "description": "List of directories to auto-discover git repositories from. Overseer recursively walks each directory, treating every subdirectory that contains a .git folder as a repo. The directory itself is not counted even if it has .git. Use this for large repo collections (e.g. a company monorepo tree) that are managed externally. Used by: overseer standup.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Absolute or ~-prefixed path to a directory containing git repositories."
+      }
     }
   },
   "$defs": {
