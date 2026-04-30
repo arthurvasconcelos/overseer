@@ -5,6 +5,7 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/arthurvasconcelos/overseer/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/arthurvasconcelos/overseer/main/scripts/install.sh | bash -s -- --channel beta
 #
 # After installing, run:
 #   overseer init           — configure brain_path and machine-local settings
@@ -16,6 +17,24 @@ set -euo pipefail
 INSTALL_DIR="${HOME}/bin"
 GITHUB_REPO="arthurvasconcelos/overseer"
 BINARY_NAME="overseer"
+CHANNEL="stable"
+
+while [[ $# -gt 0 ]]; do
+    case "${1}" in
+        --channel)
+            CHANNEL="${2}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+if [[ "${CHANNEL}" != "stable" && "${CHANNEL}" != "beta" ]]; then
+    >&2 echo "  [error]  unknown channel: ${CHANNEL} (valid: stable, beta)"
+    exit 1
+fi
 
 function detect_platform {
     local OS
@@ -42,12 +61,20 @@ function install_binary {
     echo "  [binary] detecting platform: ${PLATFORM}"
 
     local LATEST_TAG
-    LATEST_TAG="$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" \
-        | grep '"tag_name"' \
-        | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')"
+    if [[ "${CHANNEL}" == "beta" ]]; then
+        LATEST_TAG="$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/releases" \
+            | grep '"tag_name"' \
+            | grep -E '-(beta|rc|alpha)' \
+            | head -1 \
+            | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')"
+    else
+        LATEST_TAG="$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" \
+            | grep '"tag_name"' \
+            | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')"
+    fi
 
     if [[ "${LATEST_TAG}" == "" ]]; then
-        >&2 echo "  [error]  could not fetch latest release tag from GitHub"
+        >&2 echo "  [error]  could not fetch latest ${CHANNEL} release tag from GitHub"
         exit 1
     fi
 

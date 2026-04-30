@@ -37,7 +37,7 @@ func runUpdate(_ *cobra.Command, _ []string) error {
 
 	fmt.Println(tui.StyleMuted.Render("checking for updates..."))
 
-	latestTag, err := fetchLatestTag(client)
+	latestTag, err := fetchLatestTag(client, strings.Contains(Version, "-"))
 	if err != nil {
 		return err
 	}
@@ -63,8 +63,35 @@ func runUpdate(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func fetchLatestTag(client *http.Client) (string, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", githubRepo)
+func fetchLatestTag(client *http.Client, prerelease bool) (string, error) {
+	if !prerelease {
+		url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", githubRepo)
+		req, err := http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			return "", err
+		}
+		req.Header.Set("Accept", "application/vnd.github+json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("fetching latest release: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("GitHub API returned %s", resp.Status)
+		}
+
+		var release struct {
+			TagName string `json:"tag_name"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+			return "", fmt.Errorf("parsing release: %w", err)
+		}
+		return release.TagName, nil
+	}
+
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=10", githubRepo)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
@@ -73,7 +100,7 @@ func fetchLatestTag(client *http.Client) (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("fetching latest release: %w", err)
+		return "", fmt.Errorf("fetching releases: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -81,13 +108,19 @@ func fetchLatestTag(client *http.Client) (string, error) {
 		return "", fmt.Errorf("GitHub API returned %s", resp.Status)
 	}
 
-	var release struct {
-		TagName string `json:"tag_name"`
+	var releases []struct {
+		TagName    string `json:"tag_name"`
+		Prerelease bool   `json:"prerelease"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return "", fmt.Errorf("parsing release: %w", err)
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+		return "", fmt.Errorf("parsing releases: %w", err)
 	}
-	return release.TagName, nil
+	for _, r := range releases {
+		if r.Prerelease {
+			return r.TagName, nil
+		}
+	}
+	return "", fmt.Errorf("no beta release found on GitHub")
 }
 
 // progressReader wraps an io.Reader and calls onRead after every read with the

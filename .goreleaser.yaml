@@ -34,6 +34,7 @@ checksum:
 
 homebrew_casks:
   - name: overseer
+    skip_upload: "{{ if .Prerelease }}true{{ end }}"
     repository:
       owner: arthurvasconcelos
       name: homebrew-tap
@@ -41,6 +42,26 @@ homebrew_casks:
     directory: Formula
     homepage: "https://github.com/arthurvasconcelos/overseer"
     description: "Personal CLI for environment setup and daily automation"
+    binaries:
+      - overseer
+    manpages:
+      - man/*.1
+    generate_completions_from_executable:
+      shell_parameter_format: cobra
+      shells:
+        - bash
+        - zsh
+        - fish
+
+  - name: overseer-beta
+    skip_upload: "{{ if not .Prerelease }}true{{ end }}"
+    repository:
+      owner: arthurvasconcelos
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/arthurvasconcelos/overseer"
+    description: "Personal CLI for environment setup and daily automation (beta channel)"
     binaries:
       - overseer
     manpages:

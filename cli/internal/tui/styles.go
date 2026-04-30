@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -51,18 +52,26 @@ func Hyperlink(url, text string) string {
 }
 
 // Logo renders the overseer wordmark as a styled rounded box with an optional
-// version badge. Pass an empty string or "dev" to omit the badge.
+// version badge. The badge colour reflects the release channel:
+// stable = green, beta/rc = amber, dev = red.
 func Logo(version string) string {
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("99")).
 		Padding(0, 1).
 		Render(StyleHeader.Render("▸ O V E R S E E R"))
-	if version != "" && version != "dev" {
-		return box + "  " + StyleMuted.Render(version)
+	if version == "" {
+		return box
 	}
+	return box + "  " + versionStyle(version).Render(version)
+}
+
+func versionStyle(version string) lipgloss.Style {
 	if version == "dev" {
-		return box + "  " + StyleWarn.Render("dev")
+		return StyleError
 	}
-	return box
+	if strings.Contains(version, "-") {
+		return StyleWarn
+	}
+	return StyleOK
 }

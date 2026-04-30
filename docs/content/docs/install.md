@@ -5,16 +5,32 @@ weight: 1
 
 ## Homebrew (macOS)
 
+**Stable channel** (recommended):
+
 ```bash
 brew install arthurvasconcelos/tap/overseer
+```
+
+**Beta channel** (pre-release builds):
+
+```bash
+brew install arthurvasconcelos/tap/overseer-beta
 ```
 
 ## Manual install
 
 Downloads and installs the latest binary to `~/bin/`:
 
+**Stable channel** (recommended):
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/arthurvasconcelos/overseer/main/scripts/install.sh | bash
+```
+
+**Beta channel** (pre-release builds):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/arthurvasconcelos/overseer/main/scripts/install.sh | bash -s -- --channel beta
 ```
 
 Make sure `~/bin` is on your `PATH`:
