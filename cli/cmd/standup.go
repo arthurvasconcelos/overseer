@@ -86,7 +86,7 @@ func runStandup(_ *cobra.Command, _ []string) error {
 
 	// Git: commits across managed repos since yesterday authored by configured profiles.
 	profileEmails := collectProfileEmails(cfg)
-	home := resolveReposPath(cfg)
+	home, _ := resolveReposPath(cfg)
 	anyCommit := false
 	for _, repo := range cfg.Repos {
 		path := repoRoot(home, repo)
@@ -241,17 +241,6 @@ func stripANSI(s string) string {
 	return out.String()
 }
 
-// expandHome replaces a leading ~ with the user's home directory.
-func expandHome(path string) string {
-	if strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return path
-		}
-		return filepath.Join(home, path[2:])
-	}
-	return path
-}
 
 // discoverRepos recursively walks dir and returns the absolute paths of all git
 // repo roots found under it. dir itself is excluded even if it contains .git.

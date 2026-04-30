@@ -98,7 +98,10 @@ func runReposSearch(_ *cobra.Command, args []string) error {
 		return nil
 	}
 
-	home := resolveReposPath(cfg)
+	home, err := resolveReposPath(cfg)
+	if err != nil {
+		return err
+	}
 	var allMatches []reposSearchMatch
 
 	for _, repo := range cfg.Repos {
@@ -188,7 +191,10 @@ func runReposOpen(_ *cobra.Command, args []string) error {
 		repo = cfg.Repos[idx]
 	}
 
-	home := resolveReposPath(cfg)
+	home, err := resolveReposPath(cfg)
+	if err != nil {
+		return err
+	}
 	localPath := repoRoot(home, repo)
 
 	// Default to --browser if no flag is set.
@@ -268,21 +274,33 @@ func repoRoot(reposHome string, repo config.RepoConfig) string {
 
 // resolveReposPath returns the overseer repo root using this precedence:
 // 1. OVERSEER_REPOS_PATH env var
-// 2. system.repos_path in config.local.yaml
-// 3. parent of the directory containing the binary (best-effort)
-func resolveReposPath(cfg *config.Config) string {
+// 2. system.repos_path in config (brain or local)
+func resolveReposPath(cfg *config.Config) (string, error) {
 	if h := os.Getenv("OVERSEER_REPOS_PATH"); h != "" {
-		return h
+		return h, nil
 	}
 	if cfg.System.ReposPath != "" {
-		return cfg.System.ReposPath
+		return expandHome(cfg.System.ReposPath), nil
 	}
-	exe, err := os.Executable()
-	if err != nil {
-		return "."
+	return "", fmt.Errorf(
+		"repos_path not configured\n\n" +
+			"Set system.repos_path in ~/.config/overseer/config.local.yaml:\n\n" +
+			"  system:\n" +
+			"    repos_path: ~/repos\n\n" +
+			"Or set the OVERSEER_REPOS_PATH environment variable.",
+	)
+}
+
+func expandHome(path string) string {
+	if path == "~" {
+		home, _ := os.UserHomeDir()
+		return home
 	}
-	// binary lives at <overseer-home>/bin/overseer — go up two levels
-	return filepath.Dir(filepath.Dir(exe))
+	if len(path) >= 2 && path[:2] == "~/" {
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, path[2:])
+	}
+	return path
 }
 
 type repoResult struct {
@@ -316,7 +334,10 @@ func runReposStatus(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	home := resolveReposPath(cfg)
+	home, err := resolveReposPath(cfg)
+	if err != nil {
+		return err
+	}
 	results := make([]repoResult, len(cfg.Repos))
 	var wg sync.WaitGroup
 
@@ -390,7 +411,10 @@ func runReposPull(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	home := resolveReposPath(cfg)
+	home, err := resolveReposPath(cfg)
+	if err != nil {
+		return err
+	}
 	results := make([]repoResult, len(cfg.Repos))
 	var wg sync.WaitGroup
 
@@ -430,7 +454,10 @@ func runReposSetup(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	home := resolveReposPath(cfg)
+	home, err := resolveReposPath(cfg)
+	if err != nil {
+		return err
+	}
 	for _, repo := range cfg.Repos {
 		if repo.GitProfile == "" {
 			continue

@@ -48,7 +48,8 @@ func init() {
 func brewfilePath(cfg *config.Config) string {
 	if cfg.Brew.Brewfile != "" {
 		// Explicit override in config — resolve relative to repos_path.
-		return resolvePath(resolveReposPath(cfg), cfg.Brew.Brewfile)
+		home, _ := resolveReposPath(cfg)
+		return resolvePath(home, cfg.Brew.Brewfile)
 	}
 	return fmt.Sprintf("%s/Brewfile", config.BrainOverseerPath(cfg))
 }

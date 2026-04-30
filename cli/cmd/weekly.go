@@ -167,7 +167,10 @@ func runWeekly(_ *cobra.Command, _ []string) error {
 		label: "git",
 		run: func() (string, error) {
 			profileEmails := collectProfileEmails(cfg)
-			home := resolveReposPath(cfg)
+			home, err := resolveReposPath(cfg)
+			if err != nil {
+				return "", err
+			}
 			return formatWeeklyCommits(cfg, home, since, profileEmails), nil
 		},
 	})
@@ -280,7 +283,7 @@ func runWeeklyJSON(ctx context.Context, cfg *config.Config, since, now time.Time
 	}
 
 	profileEmails := collectProfileEmails(cfg)
-	home := resolveReposPath(cfg)
+	home, _ := resolveReposPath(cfg)
 	for _, repo := range cfg.Repos {
 		path := repoRoot(home, repo)
 		commits := gitCommitsSince(path, since, profileEmails)
