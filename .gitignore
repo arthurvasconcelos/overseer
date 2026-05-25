@@ -7,5 +7,5 @@ node_modules/
 *.swo
 *~
 repos/
-docs/public/
-docs/.hugo_build.lock
+docs/.vitepress/cache/
+docs/.vitepress/dist/

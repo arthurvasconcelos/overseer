@@ -5,6 +5,9 @@ on:
     branches: ["main"]
     paths:
       - "docs/**"
+      - "package.json"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 permissions:
@@ -22,19 +25,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Hugo
-        uses: peaceiris/actions-hugo@v3
-        with:
-          hugo-version: "latest"
-          extended: true
+      - uses: pnpm/action-setup@v4
 
-      - name: Build
-        working-directory: docs
-        run: hugo --minify
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build docs
+        run: pnpm docs:build
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/public/
+          path: docs/.vitepress/dist/
 
   deploy:
     environment:

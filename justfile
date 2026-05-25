@@ -9,7 +9,7 @@ dev:
 
 # serve the documentation site locally with live reload
 docs:
-    hugo server -s {{docs}} --bind 0.0.0.0 --port 1313
+    pnpm docs:dev
 
 # remove the local binary
 clean:
