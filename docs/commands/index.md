@@ -1,6 +1,5 @@
----
-title: Commands
----
+# Commands
+
 
 Full reference for all overseer subcommands.
 

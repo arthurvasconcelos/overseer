@@ -1,6 +1,5 @@
----
-title: git
----
+# git
+
 
 Git identity management. Define named profiles with different email addresses, signing keys, and git settings, then apply them per-repo or globally.
 

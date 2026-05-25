@@ -1,6 +1,5 @@
----
-title: repos
----
+# repos
+
 
 Manage git repositories defined in the `repos[]` section of config.
 

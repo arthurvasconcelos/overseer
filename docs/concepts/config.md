@@ -1,6 +1,5 @@
----
-title: Config
----
+# Config
+
 
 ## Two config files
 

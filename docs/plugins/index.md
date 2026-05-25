@@ -1,6 +1,5 @@
----
-title: Plugins
----
+# Plugins
+
 
 overseer supports two types of plugins: **native plugins** compiled into the binary, and **external plugins** discovered as executables on PATH or in the brain.
 

@@ -1,6 +1,5 @@
----
-title: daily
----
+# daily
+
 
 Morning briefing: fetches and displays today's Jira tickets, Slack mentions, Google Calendar events — all in parallel.
 

@@ -1,6 +1,5 @@
----
-title: weekly
----
+# weekly
+
 
 Activity summary for the past 7 days. Aggregates Jira issues, GitHub PRs, and GitLab MRs from all configured instances and prints them grouped by source.
 

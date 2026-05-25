@@ -1,13 +1,28 @@
 import { defineConfig } from "vitepress";
+import llmstxt, { copyOrDownloadAsMarkdownButtons } from "vitepress-plugin-llms";
+import { groupIconMdPlugin, groupIconVitePlugin } from "vitepress-plugin-group-icons";
+
+const base = process.env.DOCS_BASE ?? "/overseer/";
 
 export default defineConfig({
   title: "overseer",
   description: "A personal machine management CLI for developers.",
   lang: "en-US",
-  base: process.env.DOCS_BASE ?? "/overseer/",
+  base,
+
+  vite: {
+    plugins: [llmstxt(), groupIconVitePlugin()],
+  },
+
+  markdown: {
+    config(md) {
+      md.use(groupIconMdPlugin);
+      md.use(copyOrDownloadAsMarkdownButtons);
+    },
+  },
 
   head: [
-    ["link", { rel: "icon", href: "/overseer/favicon.svg", type: "image/svg+xml" }],
+    ["link", { rel: "icon", href: `${base}favicon.svg`, type: "image/svg+xml" }],
   ],
 
   themeConfig: {
@@ -33,6 +48,7 @@ export default defineConfig({
           },
         ],
       },
+      { text: "For LLMs", link: "/llms" },
     ],
 
     sidebar: {

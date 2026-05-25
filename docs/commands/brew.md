@@ -1,6 +1,5 @@
----
-title: brew
----
+# brew
+
 
 Manage Homebrew packages via a Brewfile in your brain.
 

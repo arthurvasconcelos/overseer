@@ -1,6 +1,5 @@
----
-title: completion
----
+# completion
+
 
 Generate shell completion scripts for overseer.
 

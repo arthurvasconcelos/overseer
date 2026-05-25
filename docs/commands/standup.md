@@ -1,6 +1,5 @@
----
-title: standup
----
+# standup
+
 
 Synthesize yesterday's activity into a standup message. Pulls Jira issues updated yesterday, GitLab MRs, and GitHub PRs from all configured instances, then uses Claude to generate a concise standup summary.
 

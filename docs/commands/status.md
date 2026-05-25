@@ -1,6 +1,5 @@
----
-title: status
----
+# status
+
 
 Health-check all configured integrations.
 

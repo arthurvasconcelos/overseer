@@ -1,6 +1,5 @@
----
-title: Concepts
----
+# Concepts
+
 
 Key ideas behind how overseer is structured and how it handles configuration.
 

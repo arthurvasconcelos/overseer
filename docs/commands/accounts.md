@@ -1,6 +1,5 @@
----
-title: accounts
----
+# accounts
+
 
 List all 1Password accounts signed into the `op` CLI.
 

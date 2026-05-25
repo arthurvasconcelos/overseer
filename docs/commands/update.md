@@ -1,6 +1,5 @@
----
-title: update
----
+# update
+
 
 Check for and apply a new overseer release.
 

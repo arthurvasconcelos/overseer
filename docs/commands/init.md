@@ -1,6 +1,5 @@
----
-title: init
----
+# init
+
 
 Interactive wizard that creates `~/.config/overseer/config.local.yaml` — the machine-local config file.
 

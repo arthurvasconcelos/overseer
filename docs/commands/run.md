@@ -1,6 +1,5 @@
----
-title: run
----
+# run
+
 
 Run a command with secrets resolved and injected as environment variables.
 

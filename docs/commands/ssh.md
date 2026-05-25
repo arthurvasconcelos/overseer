@@ -1,6 +1,5 @@
----
-title: ssh
----
+# ssh
+
 
 Manage SSH config profiles. Profiles are named SSH config blocks stored in the brain. Activating a profile writes it to `~/.ssh/overseer_active.conf`, which is included by `~/.ssh/config` via an overseer-managed `Include` directive.
 

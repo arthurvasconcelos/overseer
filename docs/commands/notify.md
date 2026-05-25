@@ -1,6 +1,5 @@
----
-title: notify
----
+# notify
+
 
 Fire a native OS desktop notification.
 

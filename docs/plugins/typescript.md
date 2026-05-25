@@ -1,6 +1,5 @@
----
-title: TypeScript SDK
----
+# TypeScript SDK
+
 
 The TypeScript SDK provides helpers for reading the overseer context and applying consistent terminal styling.
 

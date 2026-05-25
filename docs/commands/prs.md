@@ -1,6 +1,5 @@
----
-title: prs
----
+# prs
+
 
 List open pull requests (GitHub) and merge requests (GitLab) across all configured instances.
 

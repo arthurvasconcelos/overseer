@@ -1,6 +1,5 @@
----
-title: Native plugins
----
+# Native plugins
+
 
 Native plugins are compiled into the overseer binary. They differ from external plugins in that they:
 

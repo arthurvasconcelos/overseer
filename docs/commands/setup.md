@@ -1,6 +1,5 @@
----
-title: setup
----
+# setup
+
 
 Interactive bootstrap wizard for a new machine. Walks through everything in one session: brain path, git remote, machine settings, directory scaffolding, dotfile wiring, and Brew packages.
 

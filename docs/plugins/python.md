@@ -1,6 +1,5 @@
----
-title: Python SDK
----
+# Python SDK
+
 
 The Python SDK provides helpers for reading the overseer context and applying consistent terminal styling.
 

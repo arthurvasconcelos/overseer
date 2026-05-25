@@ -1,6 +1,5 @@
----
-title: config
----
+# config
+
 
 Show the active merged configuration and related utilities.
 

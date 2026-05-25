@@ -1,6 +1,5 @@
----
-title: note
----
+# note
+
 
 Obsidian vault integration. Requires `obsidian.vault_path` and `obsidian.vault_name` in config.
 

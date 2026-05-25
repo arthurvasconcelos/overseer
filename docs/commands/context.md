@@ -1,6 +1,5 @@
----
-title: context
----
+# context
+
 
 Print a self-contained description of overseer for use in AI assistant chats.
 

@@ -1,6 +1,5 @@
----
-title: plugins
----
+# plugins
+
 
 List available native and external plugins.
 

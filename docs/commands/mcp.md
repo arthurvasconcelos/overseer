@@ -1,6 +1,5 @@
----
-title: mcp
----
+# mcp
+
 
 Start a local [Model Context Protocol](https://modelcontextprotocol.io) server over stdio, letting AI assistants connect to overseer's data and run commands.
 

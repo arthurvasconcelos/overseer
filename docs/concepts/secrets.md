@@ -1,6 +1,5 @@
----
-title: Secrets
----
+# Secrets
+
 
 overseer never stores secret values. Instead, config fields that accept secrets use **1Password URI references** that are resolved at runtime via the `op` CLI.
 

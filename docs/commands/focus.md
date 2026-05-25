@@ -1,6 +1,5 @@
----
-title: focus
----
+# focus
+
 
 Start a timed focus session. Shows a live countdown in the terminal. Sends a desktop notification when the session ends. Optionally logs the elapsed time as a Jira worklog.
 

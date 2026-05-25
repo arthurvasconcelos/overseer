@@ -1,6 +1,5 @@
----
-title: brain
----
+# brain
+
 
 Manage the brain directory. See [Concepts → Brain](/concepts/brain) for what the brain is.
 

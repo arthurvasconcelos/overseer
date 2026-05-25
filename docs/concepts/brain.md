@@ -1,6 +1,5 @@
----
-title: Brain
----
+# Brain
+
 
 The **brain** is a private git repo that holds your personal config. It is intentionally separate from the overseer binary — your config can be version-controlled, backed up, and shared across machines without touching the tool itself.
 

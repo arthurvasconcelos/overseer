@@ -1,6 +1,5 @@
----
-title: env
----
+# env
+
 
 Manage environment variable profiles. Profiles map a name to a 1Password secret environment, which injects a set of environment variables into the current shell.
 
