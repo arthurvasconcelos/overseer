@@ -1,3 +1,7 @@
+---
+description: Complete reference for all overseer commands — global flags, output formats, and an index of every available command.
+---
+
 # Commands
 
 

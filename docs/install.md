@@ -1,3 +1,7 @@
+---
+description: Install overseer via Homebrew or from source, run the setup wizard, and configure shell completions.
+---
+
 # Installation
 
 

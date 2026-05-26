@@ -1,3 +1,8 @@
+---
+description: Reference secrets from 1Password using op:// URIs in your overseer config — resolved at runtime, never stored in plaintext.
+outline: deep
+---
+
 # Secrets
 
 

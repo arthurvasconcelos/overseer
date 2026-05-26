@@ -19,8 +19,7 @@ Secret values (fields containing `op://` references) are shown as their referenc
 
 `overseer config schema` prints the full JSON Schema for `config.yaml`. You can use this to enable inline validation and autocomplete in editors that support YAML Language Server:
 
-```yaml
-# brain/overseer/config.yaml
+```yaml [brain/overseer/config.yaml]
 # yaml-language-server: $schema=https://arthurvasconcelos.github.io/overseer/schema.json
 ```
 

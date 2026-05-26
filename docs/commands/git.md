@@ -1,3 +1,7 @@
+---
+description: Manage git identity profiles — configure per-repo user name, email, and GPG signing key from a central config.
+---
+
 # git
 
 

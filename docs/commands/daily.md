@@ -1,3 +1,7 @@
+---
+description: Run your morning briefing — pull open PRs, Jira tickets, calendar events, and Slack highlights into a single digest.
+---
+
 # daily
 
 

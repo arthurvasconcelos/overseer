@@ -1,3 +1,8 @@
+---
+description: How overseer's two-layer config system works — brain config merged with local overrides, covering integrations, git profiles, and repos.
+outline: deep
+---
+
 # Config
 
 
@@ -27,8 +32,7 @@ overseer config schema
 
 You can also point your editor at the schema for inline validation and autocomplete:
 
-```yaml
-# brain/overseer/config.yaml
+```yaml [brain/overseer/config.yaml]
 # yaml-language-server: $schema=https://arthurvasconcelos.github.io/overseer/schema.json
 ```
 

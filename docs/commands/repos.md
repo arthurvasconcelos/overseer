@@ -1,3 +1,7 @@
+---
+description: Manage your registered git repositories — check status across all repos, pull updates, and run setup scripts in bulk.
+---
+
 # repos
 
 

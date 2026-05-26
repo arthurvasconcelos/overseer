@@ -29,8 +29,7 @@ overseer ssh use personal   # switches to the "personal" profile
 
 SSH profiles are stored in the brain under `overseer/ssh/`. Each file is a standard SSH config block named `<profile>.conf`:
 
-```
-# brain/overseer/ssh/work.conf
+``` [brain/overseer/ssh/work.conf]
 Host github.com
   IdentityFile ~/.ssh/id_work
   User git

@@ -1,3 +1,8 @@
+---
+description: The brain is a private git repo that holds your overseer config, dotfiles, and personal data — separate from the tool itself.
+outline: deep
+---
+
 # Brain
 
 
