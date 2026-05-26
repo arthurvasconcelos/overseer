@@ -1,4 +1,4 @@
-package claude
+package ai
 
 import (
 	"bytes"
@@ -22,18 +22,17 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// teamMeta is the parsed content of brain/claude/teams/<slug>/team.yaml.
 type teamMeta struct {
-	Slug        string   `yaml:"-"`              // directory name under teamsRoot; set programmatically
+	Slug        string   `yaml:"-"`
 	Name        string   `yaml:"name"`
 	Description string   `yaml:"description"`
-	Lead        string   `yaml:"lead,omitempty"` // who the personas are advising, e.g. "Arthur, Tech Lead"
+	Lead        string   `yaml:"lead,omitempty"`
 	Personas    []string `yaml:"personas"`
 }
 
 type persona struct {
-	slug   string // file base name, e.g. "senior-be"
-	prompt string // content of <slug>.md
+	slug   string
+	prompt string
 }
 
 type loadedTeam struct {
@@ -41,12 +40,10 @@ type loadedTeam struct {
 	personas []persona
 }
 
-// teamsRoot returns the absolute path to brain/claude/teams/.
 func teamsRoot(cfg *config.Config) string {
-	return filepath.Join(brainClaudeDir(cfg), "teams")
+	return filepath.Join(brainAIDir(cfg), "teams")
 }
 
-// listTeamMetas scans teamsRoot for subdirectories containing a team.yaml.
 func listTeamMetas(cfg *config.Config) ([]teamMeta, error) {
 	root := teamsRoot(cfg)
 	entries, err := os.ReadDir(root)
@@ -79,7 +76,6 @@ func listTeamMetas(cfg *config.Config) ([]teamMeta, error) {
 	return out, nil
 }
 
-// loadTeam loads a team by slug (the directory name under teamsRoot).
 func loadTeam(cfg *config.Config, slug string) (*loadedTeam, error) {
 	dir := filepath.Join(teamsRoot(cfg), slug)
 	data, err := os.ReadFile(filepath.Join(dir, "team.yaml"))
@@ -104,8 +100,6 @@ func loadTeam(cfg *config.Config, slug string) (*loadedTeam, error) {
 	return &loadedTeam{meta: meta, personas: personas}, nil
 }
 
-// personaDisplayName converts a slug like "senior-be" to "Senior BE".
-// Words of 1-2 characters are uppercased; longer words are title-cased.
 func personaDisplayName(slug string) string {
 	parts := strings.Split(slug, "-")
 	for i, p := range parts {
@@ -120,14 +114,13 @@ func personaDisplayName(slug string) string {
 	return strings.Join(parts, " ")
 }
 
-// teamsCmd builds the `claude teams` parent command with its subcommands.
-// With no arguments it lists available teams; with a team slug it behaves as `use`.
 func teamsCmd(cfg *config.Config) *cobra.Command {
 	var copyFlag bool
 	root := &cobra.Command{
-		Use:   "teams [team]",
-		Short: "Manage Claude team personas",
-		Args:  cobra.MaximumNArgs(1),
+		Use:         "teams [team]",
+		Short:       "Manage AI team personas",
+		Annotations: map[string]string{"overseer/group": "AI"},
+		Args:        cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
 				return runTeamsUse(cfg, args[0], copyFlag, cmd)
@@ -149,11 +142,11 @@ func runTeamsList(cfg *config.Config) error {
 		return err
 	}
 
-	fmt.Println(tui.SectionHeader("claude teams", teamsRoot(cfg)))
+	fmt.Println(tui.SectionHeader("teams", teamsRoot(cfg)))
 	fmt.Println()
 
 	if len(metas) == 0 {
-		fmt.Println("  " + tui.StyleMuted.Render("no teams found — create brain/claude/teams/<name>/team.yaml"))
+		fmt.Println("  " + tui.StyleMuted.Render("no teams found — create brain/ai/teams/<name>/team.yaml"))
 		return nil
 	}
 
@@ -198,7 +191,7 @@ func teamsUseCmd(cfg *config.Config) *cobra.Command {
 				return err
 			}
 			if len(metas) == 0 {
-				fmt.Println(tui.StyleMuted.Render("no teams found — create brain/claude/teams/<name>/team.yaml"))
+				fmt.Println(tui.StyleMuted.Render("no teams found — create brain/ai/teams/<name>/team.yaml"))
 				return nil
 			}
 			items := make([]tui.SelectItem, len(metas))
@@ -213,7 +206,7 @@ func teamsUseCmd(cfg *config.Config) *cobra.Command {
 				return err
 			}
 			if idx < 0 {
-				return nil // user cancelled
+				return nil
 			}
 			return runTeamsUse(cfg, metas[idx].Slug, copyFlag, cmd)
 		},
@@ -321,14 +314,11 @@ func runTeamsConsult(cfg *config.Config, slug, question string, cmd *cobra.Comma
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// If a lead is defined, prepend a short framing to every persona's system prompt
-	// so they understand whose authority they're operating under.
 	leadPrefix := ""
 	if team.meta.Lead != "" {
 		leadPrefix = "You are advising " + team.meta.Lead + ", who has final decision-making authority on all matters. Answer directly and concisely from your persona's perspective.\n\n"
 	}
 
-	// Call each persona in parallel; preserve order via indexed channel.
 	type indexed struct {
 		i   int
 		out personaResponse
@@ -391,7 +381,6 @@ func runTeamsConsult(cfg *config.Config, slug, question string, cmd *cobra.Comma
 	return nil
 }
 
-// outputFormat reads the --format persistent flag from the root command.
 func outputFormat(cmd *cobra.Command) string {
 	f := cmd.Root().PersistentFlags().Lookup("format")
 	if f == nil {
@@ -400,7 +389,6 @@ func outputFormat(cmd *cobra.Command) string {
 	return f.Value.String()
 }
 
-// clipboardCopy writes text to the macOS clipboard via pbcopy.
 func clipboardCopy(text string) error {
 	cmd := exec.Command("pbcopy")
 	cmd.Stdin = strings.NewReader(text)
