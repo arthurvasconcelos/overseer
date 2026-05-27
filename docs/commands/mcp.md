@@ -1,25 +1,44 @@
 # mcp
 
-
 Start a local [Model Context Protocol](https://modelcontextprotocol.io) server over stdio, letting AI assistants connect to overseer's data and run commands.
 
 ```bash
 overseer mcp
 ```
 
-## Setup with Claude
+## How it works
 
-Add overseer as an MCP server in `~/.claude/settings.json`:
+`overseer mcp` is **not meant to be run directly** in your terminal. It is a
+stdio server: when launched, it blocks on stdin waiting for JSON-RPC messages
+from an MCP client. If you run it manually you will see no output and your
+prompt will not return — that is expected behaviour.
 
-```json
-{
-  "mcpServers": {
-    "overseer": {
-      "command": "overseer",
-      "args": ["mcp"]
-    }
-  }
-}
+The intended flow:
+
+1. Register overseer with your AI assistant once (see [Setup](#setup) below).
+2. Open a new AI session. The assistant reads its config, spawns `overseer mcp`
+   as a background subprocess, and pipes JSON-RPC messages through stdin/stdout.
+3. Ask the AI anything that benefits from your personal data — it calls overseer
+   tools silently and surfaces the results in the conversation.
+
+## Setup
+
+### Claude Code
+
+Registration is handled by the `claude` plugin — see [`overseer claude mcp`](/commands/claude#overseer-claude-mcp).
+
+```bash
+overseer claude mcp install
+overseer claude mcp uninstall
+```
+
+### Other AI assistants
+
+Each assistant has its own config format. For any MCP-compatible client, point it at the `overseer mcp` stdio command:
+
+```bash
+# find the full binary path to use in the client's config
+which overseer
 ```
 
 ## Available MCP tools

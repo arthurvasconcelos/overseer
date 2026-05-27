@@ -125,6 +125,23 @@ overseer claude skills remove-path ~/repos/my-ai-config/skills
 overseer claude skills remove-path   # interactive select
 ```
 
+## `overseer claude mcp`
+
+Manage the Claude Code MCP server registration for overseer. These commands
+delegate to `claude mcp add/remove` (user scope, available in all projects)
+and write to `~/.claude.json`.
+
+```bash
+overseer claude mcp install    # register — idempotent
+overseer claude mcp uninstall  # remove   — idempotent
+```
+
+Running `install` when already registered, or `uninstall` when not registered,
+prints an informative message and exits cleanly.
+
+The install command writes the full binary path so Claude Code can find it
+regardless of the PATH environment it inherits.
+
 ## Config
 
 External skill search paths are stored in the brain config under `integrations.claude.skill_search_paths`:

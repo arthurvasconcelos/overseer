@@ -18,15 +18,16 @@ var mcpCmd = &cobra.Command{
 	Short: "Start MCP server for AI assistant integration",
 	Long: `Starts a local MCP (Model Context Protocol) server over stdio.
 
-AI assistants can connect to overseer's data and run commands.
+This command is launched automatically by an MCP-compatible AI assistant
+(such as Claude Code) — you do not run it directly in your terminal.
 
-Add to ~/.claude/settings.json:
-  "mcpServers": {
-    "overseer": {
-      "command": "overseer",
-      "args": ["mcp"]
-    }
-  }`,
+The assistant reads the server address from its config, spawns this process
+as a subprocess, and communicates with it over stdin/stdout using JSON-RPC.
+You interact with the AI as normal; it calls overseer tools behind the scenes.
+
+To register with a specific AI assistant:
+
+  overseer claude mcp install    — register overseer in Claude Code`,
 	RunE: runMCP,
 }
 
@@ -38,6 +39,18 @@ func runMCP(_ *cobra.Command, _ []string) error {
 	self, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("finding executable: %w", err)
+	}
+
+	if isTerminal(os.Stdin) {
+		fmt.Fprintln(os.Stderr, "overseer MCP server")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "This command is launched automatically by an AI assistant — do not run it directly.")
+		fmt.Fprintln(os.Stderr, "To register with Claude Code, run:")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "  overseer claude mcp install")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Waiting for MCP client on stdin. Press Ctrl+C to exit.")
+		fmt.Fprintln(os.Stderr, "")
 	}
 
 	s := server.NewMCPServer("overseer", Version)
@@ -136,6 +149,11 @@ func runMCP(_ *cobra.Command, _ []string) error {
 	)
 
 	return server.ServeStdio(s)
+}
+
+func isTerminal(f *os.File) bool {
+	fi, err := f.Stat()
+	return err == nil && (fi.Mode()&os.ModeCharDevice) != 0
 }
 
 // mcpSubcmd returns a tool handler that runs an overseer subcommand with --format json.
