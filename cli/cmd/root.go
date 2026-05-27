@@ -21,6 +21,7 @@ func Execute() {
 }
 
 func init() {
+	cobra.EnableCommandSorting = false
 	rootCmd.Version = Version
 	rootCmd.SetVersionTemplate("overseer {{.Version}}\n")
 	rootCmd.PersistentFlags().StringVar(&output.Format, "format", "text", "Output format: text or json")

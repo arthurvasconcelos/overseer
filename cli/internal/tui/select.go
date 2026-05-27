@@ -41,6 +41,34 @@ func Select(title string, items []SelectItem) (int, error) {
 	return choice, nil
 }
 
+// MultiSelect shows an interactive multi-select list and returns the chosen indices.
+// Returns nil (no error) if the user cancelled without selecting anything.
+func MultiSelect(title string, items []SelectItem) ([]int, error) {
+	opts := make([]huh.Option[int], len(items))
+	for i, item := range items {
+		label := item.Title
+		if item.Subtitle != "" {
+			label += "  " + item.Subtitle
+		}
+		opts[i] = huh.NewOption(label, i)
+	}
+
+	var chosen []int
+	err := huh.NewMultiSelect[int]().
+		Title(title).
+		Options(opts...).
+		Value(&chosen).
+		Run()
+
+	if errors.Is(err, huh.ErrUserAborted) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("tui: %w", err)
+	}
+	return chosen, nil
+}
+
 // Confirm shows an interactive yes/no prompt and returns true if the user confirmed.
 // Returns false (no error) if the user cancels.
 func Confirm(title string) (bool, error) {

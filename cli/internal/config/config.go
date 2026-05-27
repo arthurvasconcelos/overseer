@@ -104,9 +104,10 @@ type IntegrationsConfig struct {
 // ClaudeIntegration configures Claude AI API access for team persona consultations.
 // APIKey is an op:// reference or a plain Anthropic API key.
 type ClaudeIntegration struct {
-	APIKey          string `mapstructure:"api_key"           json:"api_key,omitempty"`
-	DefaultTeam     string `mapstructure:"default_team"      json:"default_team,omitempty"`
-	DailyAISummary  bool   `mapstructure:"daily_ai_summary"  json:"daily_ai_summary,omitempty"`
+	APIKey           string   `mapstructure:"api_key"             json:"api_key,omitempty"`
+	DefaultTeam      string   `mapstructure:"default_team"        json:"default_team,omitempty"`
+	DailyAISummary   bool     `mapstructure:"daily_ai_summary"    json:"daily_ai_summary,omitempty"`
+	SkillSearchPaths []string `mapstructure:"skill_search_paths"  json:"skill_search_paths,omitempty"`
 }
 
 // GitHubInstance configures a single GitHub account.
@@ -322,6 +323,81 @@ func WriteBrainPluginSettings(cfg *Config, settings map[string]*PluginSettings) 
 	return nil
 }
 
+// WriteBrainClaudeRemoveSkillSearchPath removes path from integrations.claude.skill_search_paths
+// in the brain config. Returns (true, nil) if the path was removed, (false, nil) if not found.
+func WriteBrainClaudeRemoveSkillSearchPath(cfg *Config, path string) (bool, error) {
+	brainCfgPath := filepath.Join(BrainOverseerPath(cfg), "config.yaml")
+
+	data, err := os.ReadFile(brainCfgPath)
+	if err != nil {
+		return false, nil
+	}
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return false, fmt.Errorf("parsing brain config: %w", err)
+	}
+
+	var docContent *yaml.Node
+	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
+		docContent = root.Content[0]
+	} else {
+		return false, nil
+	}
+
+	integrationsNode := findMappingNode(docContent, "integrations")
+	if integrationsNode == nil {
+		return false, nil
+	}
+	claudeNode := findMappingNode(integrationsNode, "claude")
+	if claudeNode == nil {
+		return false, nil
+	}
+	seqNode := findSequenceNode(claudeNode, "skill_search_paths")
+	if seqNode == nil {
+		return false, nil
+	}
+
+	original := len(seqNode.Content)
+	var filtered []*yaml.Node
+	for _, item := range seqNode.Content {
+		if item.Value != path {
+			filtered = append(filtered, item)
+		}
+	}
+	if len(filtered) == original {
+		return false, nil
+	}
+	seqNode.Content = filtered
+
+	data, err = yaml.Marshal(&root)
+	if err != nil {
+		return false, fmt.Errorf("marshaling brain config: %w", err)
+	}
+	if err := os.WriteFile(brainCfgPath, data, 0o644); err != nil {
+		return false, fmt.Errorf("writing brain config: %w", err)
+	}
+	return true, nil
+}
+
+// findMappingNode returns the value node for key in a mapping, or nil if not found.
+func findMappingNode(parent *yaml.Node, key string) *yaml.Node {
+	for i := 0; i+1 < len(parent.Content); i += 2 {
+		if parent.Content[i].Value == key {
+			return parent.Content[i+1]
+		}
+	}
+	return nil
+}
+
+// findSequenceNode returns the sequence node for key in a mapping, or nil if not found.
+func findSequenceNode(parent *yaml.Node, key string) *yaml.Node {
+	node := findMappingNode(parent, key)
+	if node != nil && node.Kind == yaml.SequenceNode {
+		return node
+	}
+	return nil
+}
+
 // findOrCreateMapping finds the value mapping node for key in parent (a mapping
 // node), creating both the key and an empty mapping value if absent.
 func findOrCreateMapping(parent *yaml.Node, key string) *yaml.Node {
@@ -364,6 +440,69 @@ func removeKey(parent *yaml.Node, key string) {
 			return
 		}
 	}
+}
+
+// WriteBrainClaudeSkillSearchPath appends path to integrations.claude.skill_search_paths
+// in the brain config, preserving all other keys and their ordering.
+// Returns (true, nil) if the path was added, (false, nil) if it was already present.
+func WriteBrainClaudeSkillSearchPath(cfg *Config, path string) (bool, error) {
+	brainCfgPath := filepath.Join(BrainOverseerPath(cfg), "config.yaml")
+
+	var root yaml.Node
+	if data, err := os.ReadFile(brainCfgPath); err == nil {
+		if err := yaml.Unmarshal(data, &root); err != nil {
+			return false, fmt.Errorf("parsing brain config: %w", err)
+		}
+	}
+
+	var docContent *yaml.Node
+	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
+		docContent = root.Content[0]
+	} else {
+		docContent = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		root = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{docContent}}
+	}
+
+	integrationsNode := findOrCreateMapping(docContent, "integrations")
+	claudeNode := findOrCreateMapping(integrationsNode, "claude")
+	seqNode := findOrCreateStringSequence(claudeNode, "skill_search_paths")
+
+	for _, item := range seqNode.Content {
+		if item.Value == path {
+			return false, nil
+		}
+	}
+	seqNode.Content = append(seqNode.Content, &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Tag:   "!!str",
+		Value: path,
+	})
+
+	data, err := yaml.Marshal(&root)
+	if err != nil {
+		return false, fmt.Errorf("marshaling brain config: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(brainCfgPath), 0o755); err != nil {
+		return false, err
+	}
+	if err := os.WriteFile(brainCfgPath, data, 0o644); err != nil {
+		return false, fmt.Errorf("writing brain config: %w", err)
+	}
+	return true, nil
+}
+
+// findOrCreateStringSequence finds the sequence node for key in parent (a mapping
+// node), creating both the key and an empty sequence if absent.
+func findOrCreateStringSequence(parent *yaml.Node, key string) *yaml.Node {
+	for i := 0; i+1 < len(parent.Content); i += 2 {
+		if parent.Content[i].Value == key {
+			return parent.Content[i+1]
+		}
+	}
+	keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}
+	valNode := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+	parent.Content = append(parent.Content, keyNode, valNode)
+	return valNode
 }
 
 // Load reads config with this merge order (later overrides earlier):

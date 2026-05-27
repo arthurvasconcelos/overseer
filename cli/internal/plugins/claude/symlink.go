@@ -141,7 +141,9 @@ func scanChildrenTarget(t managedTarget, brainPath, oldBrainDir string) targetSc
 
 // applyTarget executes the action for a single target. Returns true if a
 // follow-up action was taken, false if skipped.
-func applyTarget(scan targetScan, brainClaudeDir, oldBrainDir string, dryRun bool) error {
+// skipFn, if non-nil, is called for each child name when kind==linkChildren;
+// returning true skips that child (used to honour the skills disabled list).
+func applyTarget(scan targetScan, brainClaudeDir, oldBrainDir string, dryRun bool, skipFn func(string) bool) error {
 	t := scan.target
 	brainPath := filepath.Join(brainClaudeDir, t.brainRel)
 
@@ -152,7 +154,7 @@ func applyTarget(scan targetScan, brainClaudeDir, oldBrainDir string, dryRun boo
 
 	case actionLinkOnly:
 		if t.kind == linkChildren {
-			return applyChildren(t, brainPath, dryRun)
+			return applyChildren(t, brainPath, dryRun, skipFn)
 		}
 		return makeLink(brainPath, t.localPath, dryRun, t.name)
 
@@ -213,7 +215,7 @@ func applyMigrate(t managedTarget, brainPath, oldBrainDir string, dryRun bool) e
 	return makeLink(brainPath, t.localPath, dryRun, t.name)
 }
 
-func applyChildren(t managedTarget, brainPath string, dryRun bool) error {
+func applyChildren(t managedTarget, brainPath string, dryRun bool, skipFn func(string) bool) error {
 	entries, err := os.ReadDir(brainPath)
 	if err != nil {
 		return err
@@ -222,6 +224,10 @@ func applyChildren(t managedTarget, brainPath string, dryRun bool) error {
 		return err
 	}
 	for _, entry := range entries {
+		if skipFn != nil && skipFn(entry.Name()) {
+			fmt.Printf("  %s  %s\n", tui.StyleMuted.Render("skip  "), tui.StyleDim.Render(t.brainRel+"/"+entry.Name()+" (disabled)"))
+			continue
+		}
 		src := filepath.Join(brainPath, entry.Name())
 		dst := filepath.Join(t.localPath, entry.Name())
 		if err := makeLink(src, dst, dryRun, t.brainRel+"/"+entry.Name()); err != nil {

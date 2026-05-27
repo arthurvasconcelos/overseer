@@ -39,6 +39,7 @@ func commands(cfg *config.Config) []*cobra.Command {
 	}
 	root.AddCommand(setupCmd(cfg))
 	root.AddCommand(listCmd(cfg))
+	root.AddCommand(skillsCmd(cfg))
 	return []*cobra.Command{root}
 }
 

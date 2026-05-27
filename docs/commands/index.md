@@ -24,6 +24,7 @@ All commands that produce structured data support `--format json`. JSON output a
 | [`accounts`](/commands/accounts) | List 1Password accounts signed into the `op` CLI |
 | [`brain`](/commands/brain) | Manage the brain directory |
 | [`brew`](/commands/brew) | Manage Homebrew packages via Brewfile |
+| [`claude`](/commands/claude) | Manage Claude AI config symlinks and skills (plugin) |
 | [`completion`](/commands/completion) | Generate shell completion scripts |
 | [`config`](/commands/config) | Show active config and JSON Schema |
 | [`context`](/commands/context) | Print a self-contained AI-friendly description of overseer |

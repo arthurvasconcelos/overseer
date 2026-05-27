@@ -15,6 +15,7 @@ function sidebarCommands(): DefaultTheme.SidebarItem[] {
         { text: "accounts", link: "/commands/accounts" },
         { text: "brain", link: "/commands/brain" },
         { text: "brew", link: "/commands/brew" },
+        { text: "claude", link: "/commands/claude" },
         { text: "completion", link: "/commands/completion" },
         { text: "config", link: "/commands/config" },
         { text: "context", link: "/commands/context" },

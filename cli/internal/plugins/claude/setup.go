@@ -152,9 +152,15 @@ func runSetup(cfg *config.Config, dryRun bool) error {
 		}
 	}
 
+	state := readSkillsState(claudeDir)
+
 	// Apply each scan in order. Stop on first error.
 	for _, s := range scans {
-		if err := applyTarget(s, claudeDir, oldBrainRoot, dryRun); err != nil {
+		var skipFn func(string) bool
+		if s.target.brainRel == "skills" {
+			skipFn = func(name string) bool { return isDisabled(state, name) }
+		}
+		if err := applyTarget(s, claudeDir, oldBrainRoot, dryRun, skipFn); err != nil {
 			return fmt.Errorf("%s: %w", s.target.name, err)
 		}
 	}

@@ -399,6 +399,11 @@
         "daily_ai_summary": {
           "description": "When true, append a 3-sentence AI-generated summary to `overseer daily` output.",
           "type": "boolean"
+        },
+        "skill_search_paths": {
+          "description": "Extra directories to scan for skills (in addition to <brain>/claude/skills/). Each directory should contain skill subdirectories. Supports ~ expansion.",
+          "type": "array",
+          "items": { "type": "string" }
         }
       }
     },
