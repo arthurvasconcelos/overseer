@@ -19,7 +19,7 @@
       }
     },
     "plugins": {
-      "description": "Native plugin overrides. Keys are plugin names (e.g. \"jira\", \"slack\", \"claude\"). Use to explicitly enable or disable a plugin independent of its integration config.",
+      "description": "Native plugin overrides. Keys are plugin names (e.g. \"jira\", \"slack\", \"claude\", \"codex\"). Use to explicitly enable or disable a plugin independent of its integration config.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -54,7 +54,8 @@
           "type": "array",
           "items": { "$ref": "#/$defs/gitlabInstance" }
         },
-        "claude": { "$ref": "#/$defs/claudeIntegration" }
+        "claude": { "$ref": "#/$defs/claudeIntegration" },
+        "codex": { "$ref": "#/$defs/codexIntegration" }
       }
     },
     "git": {
@@ -402,6 +403,18 @@
         },
         "skill_search_paths": {
           "description": "Extra directories to scan for skills (in addition to <brain>/claude/skills/). Each directory should contain skill subdirectories. Supports ~ expansion.",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "codexIntegration": {
+      "description": "Codex local workflow configuration.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "skill_search_paths": {
+          "description": "Extra directories to scan for skills (in addition to <brain>/codex/skills/). Each directory should contain skill subdirectories. Supports ~ expansion.",
           "type": "array",
           "items": { "type": "string" }
         }

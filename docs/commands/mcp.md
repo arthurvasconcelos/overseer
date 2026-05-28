@@ -32,6 +32,15 @@ overseer claude mcp install
 overseer claude mcp uninstall
 ```
 
+### Codex
+
+Registration is handled by the `codex` plugin — see [`overseer codex mcp`](/commands/codex#overseer-codex-mcp).
+
+```bash
+overseer codex mcp install
+overseer codex mcp uninstall
+```
+
 ### Other AI assistants
 
 Each assistant has its own config format. For any MCP-compatible client, point it at the `overseer mcp` stdio command:

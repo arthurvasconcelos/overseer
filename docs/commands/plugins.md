@@ -18,6 +18,7 @@ Shows all native plugins with their enabled/disabled state, then any external pl
   github     ✓ enabled   GitHub pull requests
   gitlab     ✓ enabled   GitLab merge requests
   claude     ✗ disabled  Claude AI config management
+  codex      ✗ disabled  Codex config management
 
 ▸ external plugins
   deploy     Deploy to production

@@ -25,6 +25,7 @@ All commands that produce structured data support `--format json`. JSON output a
 | [`brain`](/commands/brain) | Manage the brain directory |
 | [`brew`](/commands/brew) | Manage Homebrew packages via Brewfile |
 | [`claude`](/commands/claude) | Manage Claude AI config symlinks and skills (plugin) |
+| [`codex`](/commands/codex) | Manage Codex config symlinks and skills (plugin) |
 | [`completion`](/commands/completion) | Generate shell completion scripts |
 | [`config`](/commands/config) | Show active config and JSON Schema |
 | [`context`](/commands/context) | Print a self-contained AI-friendly description of overseer |

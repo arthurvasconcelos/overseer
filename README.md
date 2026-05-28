@@ -118,6 +118,7 @@ Native plugins for the following services are built into the binary and activate
 | GitLab | `overseer gitlab` | ✓ | ✓ |
 | Obsidian | — | ✓ | ✓ |
 | Claude | `overseer claude` | — | ✓ |
+| Codex | `overseer codex` | — | ✓ |
 
 Integration-specific commands only appear in help when that integration is configured.
 

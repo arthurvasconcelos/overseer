@@ -33,6 +33,22 @@
 #       base_url: https://gitlab.yourorg.com
 #       token: op://Vault/GitLab PAT/credential
 #       op_account: <1password-account-id>
+#
+#   claude:
+#     skill_search_paths:
+#       - ~/repos/my-ai-config/skills
+#
+#   codex:
+#     skill_search_paths:
+#       - ~/repos/my-ai-config/skills
+
+# --- Opt-in native plugins ---
+# plugins:
+#   settings:
+#     claude:
+#       enabled: true
+#     codex:
+#       enabled: true
 
 # --- Git identity profiles ---
 # git:

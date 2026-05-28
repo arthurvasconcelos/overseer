@@ -26,6 +26,8 @@ plugins:
       enabled: false   # disable even if integrations.jira[] is populated
     claude:
       enabled: true    # opt-in plugins require explicit enable
+    codex:
+      enabled: true    # opt-in plugins require explicit enable
 ```
 
 ## Built-in plugins
@@ -108,6 +110,37 @@ plugins:
 | `claude/skills/<name>/` | `~/.claude/skills/<name>` | per-dir symlinks |
 
 Run `overseer claude setup` to adopt existing files, migrate old symlinks, and create any missing links. The wizard is safe to re-run — already correct symlinks are skipped.
+
+### `codex`
+
+Codex configuration management. Manages symlinks between the brain and `~/.codex/`.
+
+- **Default**: disabled — must be explicitly enabled
+- **Commands**: `overseer codex setup`, `overseer codex list`, `overseer codex skills`, `overseer codex mcp`
+- **status**: symlink health for all managed Codex config targets
+
+**Enable:**
+
+```yaml
+plugins:
+  settings:
+    codex:
+      enabled: true
+```
+
+**Brain layout** (`<brain>/codex/`):
+
+| Brain path | Local target | Link type |
+|---|---|---|
+| `codex/AGENTS.md` | `~/.codex/AGENTS.md` | file symlink |
+| `codex/config.toml` | `~/.codex/config.toml` | file symlink |
+| `codex/plans/` | `~/.codex/plans` | whole-dir symlink |
+| `codex/memories/` | `~/.codex/memories` | whole-dir symlink |
+| `codex/hooks/<name>` | `~/.codex/hooks/<name>` | per-file symlinks |
+| `codex/skills/<name>/` | `~/.codex/skills/<name>` | per-dir symlinks |
+| `codex/scripts/<name>` | `~/.codex/scripts/<name>` | per-file symlinks |
+
+Run `overseer codex setup` to adopt existing files, migrate old symlinks, and create any missing links. The wizard is safe to re-run — already correct symlinks are skipped.
 
 ## Writing a native plugin
 

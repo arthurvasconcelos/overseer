@@ -371,13 +371,17 @@ plugins:
       enabled: false  # disable an integration plugin
     claude:
       enabled: true   # opt-in plugin
+    codex:
+      enabled: true   # opt-in plugin
 ```
 
-Built-in native plugins: `jira`, `slack`, `google`, `github`, `gitlab`, `obsidian`, `claude`, `devctx`.
+Built-in native plugins: `jira`, `slack`, `google`, `github`, `gitlab`, `obsidian`, `claude`, `codex`, `devctx`.
 
 Integration plugins (`jira`, `slack`, `google`, `github`, `gitlab`) also register their own CLI commands (`overseer jira`, `overseer slack`, `overseer gcal`, `overseer github`, `overseer gitlab`). These commands only appear in help output when the corresponding integration is configured — so the help stays clean for users who don't use a given service. The `gcal` plugin requires a one-time OAuth login via `overseer gcal auth`; stale or missing tokens are detected automatically and prompt the user to re-run auth.
 
 The `claude` plugin manages symlinks between `<brain>/claude/` and `~/.claude/` (settings, CLAUDE.md, plans, memory, hooks, skills). Run `overseer claude setup` for an interactive wizard.
+
+The `codex` plugin manages symlinks between `<brain>/codex/` and `~/.codex/` (config.toml, AGENTS.md, plans, memories, hooks, skills). Run `overseer codex setup` for an interactive wizard.
 
 List native plugins and their state: `overseer plugins`
 

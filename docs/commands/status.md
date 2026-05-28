@@ -19,6 +19,7 @@ Built-in plugins that contribute to `status`:
 | `google` | OAuth token validity per account |
 | `obsidian` | Vault path exists on disk |
 | `claude` | Symlink health for managed Claude config files |
+| `codex` | Symlink health for managed Codex config files |
 
 ## JSON output
 

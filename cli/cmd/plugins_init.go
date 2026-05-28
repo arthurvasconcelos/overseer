@@ -5,6 +5,7 @@ package cmd
 import (
 	_ "github.com/arthurvasconcelos/overseer/internal/plugins/ai"
 	_ "github.com/arthurvasconcelos/overseer/internal/plugins/claude"
+	_ "github.com/arthurvasconcelos/overseer/internal/plugins/codex"
 	_ "github.com/arthurvasconcelos/overseer/internal/plugins/devctx"
 	_ "github.com/arthurvasconcelos/overseer/internal/plugins/github"
 	_ "github.com/arthurvasconcelos/overseer/internal/plugins/gitlab"

@@ -93,12 +93,13 @@ type SecretsConfig struct {
 
 // IntegrationsConfig holds all third-party integration configs.
 type IntegrationsConfig struct {
-	Jira   []JiraInstance    `mapstructure:"jira"   json:"jira,omitempty"`
-	Slack  []SlackWorkspace  `mapstructure:"slack"  json:"slack,omitempty"`
-	Google []GoogleAccount   `mapstructure:"google" json:"google,omitempty"`
-	GitHub []GitHubInstance  `mapstructure:"github" json:"github,omitempty"`
-	GitLab []GitLabInstance  `mapstructure:"gitlab" json:"gitlab,omitempty"`
+	Jira   []JiraInstance     `mapstructure:"jira"   json:"jira,omitempty"`
+	Slack  []SlackWorkspace   `mapstructure:"slack"  json:"slack,omitempty"`
+	Google []GoogleAccount    `mapstructure:"google" json:"google,omitempty"`
+	GitHub []GitHubInstance   `mapstructure:"github" json:"github,omitempty"`
+	GitLab []GitLabInstance   `mapstructure:"gitlab" json:"gitlab,omitempty"`
 	Claude *ClaudeIntegration `mapstructure:"claude" json:"claude,omitempty"`
+	Codex  *CodexIntegration  `mapstructure:"codex"  json:"codex,omitempty"`
 }
 
 // ClaudeIntegration configures Claude AI API access for team persona consultations.
@@ -108,6 +109,11 @@ type ClaudeIntegration struct {
 	DefaultTeam      string   `mapstructure:"default_team"        json:"default_team,omitempty"`
 	DailyAISummary   bool     `mapstructure:"daily_ai_summary"    json:"daily_ai_summary,omitempty"`
 	SkillSearchPaths []string `mapstructure:"skill_search_paths"  json:"skill_search_paths,omitempty"`
+}
+
+// CodexIntegration configures Codex-specific local workflow settings.
+type CodexIntegration struct {
+	SkillSearchPaths []string `mapstructure:"skill_search_paths" json:"skill_search_paths,omitempty"`
 }
 
 // GitHubInstance configures a single GitHub account.
@@ -198,12 +204,12 @@ type GitDefaults struct {
 type GitProfile struct {
 	Name          string `mapstructure:"name"           json:"name"`
 	Email         string `mapstructure:"email"          json:"email,omitempty"`
-	SigningKey     string `mapstructure:"signing_key"    json:"signing_key,omitempty"`    // plain value or op:// reference
-	UserName      string `mapstructure:"user_name"      json:"user_name,omitempty"`      // overrides defaults.user_name
-	GPGFormat     string `mapstructure:"gpg_format"     json:"gpg_format,omitempty"`     // overrides defaults.gpg_format
+	SigningKey    string `mapstructure:"signing_key"    json:"signing_key,omitempty"`      // plain value or op:// reference
+	UserName      string `mapstructure:"user_name"      json:"user_name,omitempty"`        // overrides defaults.user_name
+	GPGFormat     string `mapstructure:"gpg_format"     json:"gpg_format,omitempty"`       // overrides defaults.gpg_format
 	GPGSSHProgram string `mapstructure:"gpg_ssh_program" json:"gpg_ssh_program,omitempty"` // overrides defaults.gpg_ssh_program
-	CommitGPGSign *bool  `mapstructure:"commit_gpgsign" json:"commit_gpgsign,omitempty"` // overrides defaults.commit_gpgsign
-	OPAccount     string `mapstructure:"op_account"     json:"op_account,omitempty"`     // for op:// references in this profile
+	CommitGPGSign *bool  `mapstructure:"commit_gpgsign" json:"commit_gpgsign,omitempty"`   // overrides defaults.commit_gpgsign
+	OPAccount     string `mapstructure:"op_account"     json:"op_account,omitempty"`       // for op:// references in this profile
 }
 
 // ResolveBrainPath returns the brain directory using this precedence:
@@ -326,6 +332,16 @@ func WriteBrainPluginSettings(cfg *Config, settings map[string]*PluginSettings) 
 // WriteBrainClaudeRemoveSkillSearchPath removes path from integrations.claude.skill_search_paths
 // in the brain config. Returns (true, nil) if the path was removed, (false, nil) if not found.
 func WriteBrainClaudeRemoveSkillSearchPath(cfg *Config, path string) (bool, error) {
+	return writeBrainRemoveSkillSearchPath(cfg, "claude", path)
+}
+
+// WriteBrainCodexRemoveSkillSearchPath removes path from integrations.codex.skill_search_paths
+// in the brain config. Returns (true, nil) if the path was removed, (false, nil) if not found.
+func WriteBrainCodexRemoveSkillSearchPath(cfg *Config, path string) (bool, error) {
+	return writeBrainRemoveSkillSearchPath(cfg, "codex", path)
+}
+
+func writeBrainRemoveSkillSearchPath(cfg *Config, integration, path string) (bool, error) {
 	brainCfgPath := filepath.Join(BrainOverseerPath(cfg), "config.yaml")
 
 	data, err := os.ReadFile(brainCfgPath)
@@ -348,11 +364,11 @@ func WriteBrainClaudeRemoveSkillSearchPath(cfg *Config, path string) (bool, erro
 	if integrationsNode == nil {
 		return false, nil
 	}
-	claudeNode := findMappingNode(integrationsNode, "claude")
-	if claudeNode == nil {
+	integrationNode := findMappingNode(integrationsNode, integration)
+	if integrationNode == nil {
 		return false, nil
 	}
-	seqNode := findSequenceNode(claudeNode, "skill_search_paths")
+	seqNode := findSequenceNode(integrationNode, "skill_search_paths")
 	if seqNode == nil {
 		return false, nil
 	}
@@ -446,6 +462,17 @@ func removeKey(parent *yaml.Node, key string) {
 // in the brain config, preserving all other keys and their ordering.
 // Returns (true, nil) if the path was added, (false, nil) if it was already present.
 func WriteBrainClaudeSkillSearchPath(cfg *Config, path string) (bool, error) {
+	return writeBrainSkillSearchPath(cfg, "claude", path)
+}
+
+// WriteBrainCodexSkillSearchPath appends path to integrations.codex.skill_search_paths
+// in the brain config, preserving all other keys and their ordering.
+// Returns (true, nil) if the path was added, (false, nil) if it was already present.
+func WriteBrainCodexSkillSearchPath(cfg *Config, path string) (bool, error) {
+	return writeBrainSkillSearchPath(cfg, "codex", path)
+}
+
+func writeBrainSkillSearchPath(cfg *Config, integration, path string) (bool, error) {
 	brainCfgPath := filepath.Join(BrainOverseerPath(cfg), "config.yaml")
 
 	var root yaml.Node
@@ -464,8 +491,8 @@ func WriteBrainClaudeSkillSearchPath(cfg *Config, path string) (bool, error) {
 	}
 
 	integrationsNode := findOrCreateMapping(docContent, "integrations")
-	claudeNode := findOrCreateMapping(integrationsNode, "claude")
-	seqNode := findOrCreateStringSequence(claudeNode, "skill_search_paths")
+	integrationNode := findOrCreateMapping(integrationsNode, integration)
+	seqNode := findOrCreateStringSequence(integrationNode, "skill_search_paths")
 
 	for _, item := range seqNode.Content {
 		if item.Value == path {
