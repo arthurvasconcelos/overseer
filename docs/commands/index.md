@@ -34,6 +34,7 @@ All commands that produce structured data support `--format json`. JSON output a
 | [`focus`](/commands/focus) | Timed focus session with optional Jira time logging |
 | [`git`](/commands/git) | Git identity management |
 | [`init`](/commands/init) | Create `~/.config/overseer/config.local.yaml` interactively |
+| [`learn`](/commands/learn) | Capture and review structured learning entries |
 | [`mcp`](/commands/mcp) | Start MCP server for AI assistant integration |
 | [`note`](/commands/note) | Obsidian vault integration |
 | [`notify`](/commands/notify) | Fire a native OS desktop notification |

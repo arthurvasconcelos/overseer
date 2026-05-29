@@ -24,6 +24,7 @@ function sidebarCommands(): DefaultTheme.SidebarItem[] {
         { text: "focus", link: "/commands/focus" },
         { text: "git", link: "/commands/git" },
         { text: "init", link: "/commands/init" },
+        { text: "learn", link: "/commands/learn" },
         { text: "mcp", link: "/commands/mcp" },
         { text: "note", link: "/commands/note" },
         { text: "notify", link: "/commands/notify" },

@@ -60,6 +60,11 @@ which overseer
 | `get_config` | Return the active config as JSON |
 | `run_command` | Run a shell command with secrets injected |
 | `run_note_search` | Search the Obsidian vault |
+| `learning_add` | Add a structured learning entry |
+| `learning_due` | Return learning entries due for review |
+| `learning_search` | Search learning entries |
+| `learning_status` | Return learning counts and upcoming schedule |
+| `learning_review` | Record a learning review and return the updated schedule |
 
 ### `run_command` parameters
 
@@ -69,6 +74,33 @@ which overseer
 | `gitlab` | No | GitLab instance name — injects `GITLAB_TOKEN` and `GITLAB_HOST` |
 | `github` | No | GitHub instance name — injects `GITHUB_TOKEN` |
 | `env` | No | 1Password environment name — injects its secrets as env vars |
+
+### Learning tool parameters
+
+`learning_add`
+
+| Parameter | Required | Description |
+|---|---|---|
+| `topic` | Yes | Learning topic |
+| `description` | Yes | Learning entry description |
+| `quiz` | Yes | Array of quiz questions |
+| `source` | No | Source URL, note, or context |
+
+`learning_search`
+
+| Parameter | Required | Description |
+|---|---|---|
+| `query` | Yes | Search text matched against topic, source, description, and quiz questions |
+
+`learning_review`
+
+| Parameter | Required | Description |
+|---|---|---|
+| `entry_id` | Yes | Learning entry ID |
+| `rating` | Yes | One of `missed`, `hard`, `good`, or `easy` |
+| `notes` | No | Optional review notes |
+
+`learning_due` and `learning_status` do not require parameters.
 
 ## Alternative: context dump
 
