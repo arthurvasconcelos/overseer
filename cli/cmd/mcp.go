@@ -2,10 +2,13 @@ package cmd
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/arthurvasconcelos/overseer/internal/learning"
@@ -36,6 +39,10 @@ func init() {
 	rootCmd.AddCommand(mcpCmd)
 }
 
+const mcpServerInstructions = `overseer is a personal local assistant server for development context, repository status, notes, command execution, and structured learning.
+
+For learning workflows, prefer the dedicated learning tools over shell commands. Use learning_status, learning_due, learning_search, and learning_get for read-heavy context before mutating data. Use learning_add only when the user wants to capture a durable learning entry. Use learning_review only after a review rating is known or explicitly provided.`
+
 func runMCP(_ *cobra.Command, _ []string) error {
 	self, err := os.Executable()
 	if err != nil {
@@ -54,7 +61,7 @@ func runMCP(_ *cobra.Command, _ []string) error {
 		fmt.Fprintln(os.Stderr, "")
 	}
 
-	s := server.NewMCPServer("overseer", Version)
+	s := server.NewMCPServer("overseer", Version, server.WithInstructions(mcpServerInstructions))
 
 	s.AddTool(
 		mcp.NewTool("list_commands",
@@ -161,6 +168,17 @@ func runMCP(_ *cobra.Command, _ []string) error {
 	)
 
 	s.AddTool(
+		mcp.NewTool("learning_draft",
+			mcp.WithDescription("Validate and preview a learning entry without saving it"),
+			mcp.WithString("topic", mcp.Required(), mcp.Description("Learning topic")),
+			mcp.WithString("description", mcp.Required(), mcp.Description("Learning entry description")),
+			mcp.WithArray("quiz", mcp.Required(), mcp.Description("Quiz questions"), mcp.WithStringItems()),
+			mcp.WithString("source", mcp.Description("Optional source URL, note, or context")),
+		),
+		mcpLearningDraft,
+	)
+
+	s.AddTool(
 		mcp.NewTool("learning_due",
 			mcp.WithDescription("Return learning entries due for review as JSON"),
 		),
@@ -173,6 +191,14 @@ func runMCP(_ *cobra.Command, _ []string) error {
 			mcp.WithString("query", mcp.Required(), mcp.Description("Search query")),
 		),
 		mcpLearningSearch,
+	)
+
+	s.AddTool(
+		mcp.NewTool("learning_get",
+			mcp.WithDescription("Return one learning entry with review history"),
+			mcp.WithNumber("entry_id", mcp.Required(), mcp.Description("Learning entry ID")),
+		),
+		mcpLearningGet,
 	)
 
 	s.AddTool(
@@ -190,6 +216,45 @@ func runMCP(_ *cobra.Command, _ []string) error {
 			mcp.WithString("notes", mcp.Description("Optional review notes")),
 		),
 		mcpLearningReview,
+	)
+
+	s.AddTool(
+		mcp.NewTool("learning_archive",
+			mcp.WithDescription("Archive an active learning entry and return the archived entry"),
+			mcp.WithNumber("entry_id", mcp.Required(), mcp.Description("Learning entry ID")),
+		),
+		mcpLearningArchive,
+	)
+
+	s.AddResource(
+		mcp.NewResource("overseer://learning/status", "Learning Status",
+			mcp.WithResourceDescription("Current learning counts and upcoming schedule as JSON"),
+			mcp.WithMIMEType("application/json"),
+		),
+		mcpLearningStatusResource,
+	)
+
+	s.AddResource(
+		mcp.NewResource("overseer://learning/due", "Due Learning Reviews",
+			mcp.WithResourceDescription("Learning entries due for review as JSON"),
+			mcp.WithMIMEType("application/json"),
+		),
+		mcpLearningDueResource,
+	)
+
+	s.AddResourceTemplate(
+		mcp.NewResourceTemplate("overseer://learning/entries/{entry_id}", "Learning Entry Detail",
+			mcp.WithTemplateDescription("One learning entry with review history as JSON"),
+			mcp.WithTemplateMIMEType("application/json"),
+		),
+		mcpLearningEntryResource,
+	)
+
+	s.AddPrompt(
+		mcp.NewPrompt("learning_review_session",
+			mcp.WithPromptDescription("Prepare an assistant-led review session using due learning entries"),
+		),
+		mcpLearningReviewSessionPrompt,
 	)
 
 	return server.ServeStdio(s)
@@ -250,40 +315,68 @@ func mcpListCommands(_ context.Context) (*mcp.CallToolResult, error) {
 }
 
 func mcpLearningAdd(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	input, result := mcpLearningAddInput(req)
+	if result != nil {
+		return result, nil
+	}
+	svc, err := learningService(ctx)
+	if err != nil {
+		return mcpToolError("learning_service_unavailable", err.Error(), nil), nil
+	}
+	defer svc.Close()
+	entry, err := svc.Add(ctx, input)
+	if errors.Is(err, learning.ErrDuplicateTopic) {
+		return mcpToolError("duplicate_topic", err.Error(), map[string]any{"topic": input.Topic}), nil
+	}
+	if err != nil {
+		return mcpToolError("learning_add_failed", err.Error(), nil), nil
+	}
+	return mcpJSON(entry)
+}
+
+func mcpLearningAddInput(req mcp.CallToolRequest) (learning.AddInput, *mcp.CallToolResult) {
 	topic, err := req.RequireString("topic")
 	if err != nil {
-		return mcp.NewToolResultError("topic is required"), nil
+		return learning.AddInput{}, mcpToolError("invalid_input", "topic is required", nil)
 	}
 	description, err := req.RequireString("description")
 	if err != nil {
-		return mcp.NewToolResultError("description is required"), nil
+		return learning.AddInput{}, mcpToolError("invalid_input", "description is required", nil)
 	}
 	quiz, err := req.RequireStringSlice("quiz")
 	if err != nil || len(cleanLearningQuestions(quiz)) == 0 {
-		return mcp.NewToolResultError("quiz must include at least one question"), nil
+		return learning.AddInput{}, mcpToolError("invalid_input", "quiz must include at least one question", nil)
 	}
 	source := req.GetString("source", "")
+	return learning.AddInput{Topic: topic, Source: source, Description: description, Questions: quiz}, nil
+}
+
+func mcpLearningDraft(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	input, result := mcpLearningAddInput(req)
+	if result != nil {
+		return result, nil
+	}
 	svc, err := learningService(ctx)
 	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+		return mcpToolError("learning_service_unavailable", err.Error(), nil), nil
 	}
 	defer svc.Close()
-	entry, err := svc.Add(ctx, learning.AddInput{Topic: topic, Source: source, Description: description, Questions: quiz})
+	draft, err := svc.Draft(ctx, input)
 	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+		return mcpToolError("learning_draft_failed", err.Error(), nil), nil
 	}
-	return mcpJSON(entry)
+	return mcpJSON(draft)
 }
 
 func mcpLearningDue(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	svc, err := learningService(ctx)
 	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+		return mcpToolError("learning_service_unavailable", err.Error(), nil), nil
 	}
 	defer svc.Close()
 	entries, err := svc.Due(ctx)
 	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+		return mcpToolError("learning_due_failed", err.Error(), nil), nil
 	}
 	return mcpJSON(entries)
 }
@@ -291,29 +384,49 @@ func mcpLearningDue(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolRe
 func mcpLearningSearch(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	query, err := req.RequireString("query")
 	if err != nil {
-		return mcp.NewToolResultError("query is required"), nil
+		return mcpToolError("invalid_input", "query is required", nil), nil
 	}
 	svc, err := learningService(ctx)
 	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+		return mcpToolError("learning_service_unavailable", err.Error(), nil), nil
 	}
 	defer svc.Close()
 	entries, err := svc.Search(ctx, query)
 	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+		return mcpToolError("learning_search_failed", err.Error(), nil), nil
 	}
 	return mcpJSON(entries)
+}
+
+func mcpLearningGet(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	entryID, err := req.RequireInt("entry_id")
+	if err != nil {
+		return mcpToolError("invalid_input", "entry_id is required", nil), nil
+	}
+	svc, err := learningService(ctx)
+	if err != nil {
+		return mcpToolError("learning_service_unavailable", err.Error(), nil), nil
+	}
+	defer svc.Close()
+	detail, err := svc.Detail(ctx, int64(entryID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return mcpToolError("entry_not_found", fmt.Sprintf("learning entry not found: %d", entryID), map[string]any{"entry_id": entryID}), nil
+	}
+	if err != nil {
+		return mcpToolError("learning_get_failed", err.Error(), nil), nil
+	}
+	return mcpJSON(detail)
 }
 
 func mcpLearningStatus(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	svc, err := learningService(ctx)
 	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+		return mcpToolError("learning_service_unavailable", err.Error(), nil), nil
 	}
 	defer svc.Close()
 	status, err := svc.Status(ctx)
 	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+		return mcpToolError("learning_status_failed", err.Error(), nil), nil
 	}
 	return mcpJSON(status)
 }
@@ -321,23 +434,110 @@ func mcpLearningStatus(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToo
 func mcpLearningReview(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	entryID, err := req.RequireInt("entry_id")
 	if err != nil {
-		return mcp.NewToolResultError("entry_id is required"), nil
+		return mcpToolError("invalid_input", "entry_id is required", nil), nil
 	}
 	rating, err := req.RequireString("rating")
 	if err != nil {
-		return mcp.NewToolResultError("rating is required"), nil
+		return mcpToolError("invalid_input", "rating is required", nil), nil
 	}
 	notes := req.GetString("notes", "")
 	svc, err := learningService(ctx)
 	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+		return mcpToolError("learning_service_unavailable", err.Error(), nil), nil
 	}
 	defer svc.Close()
 	review, err := svc.Review(ctx, int64(entryID), rating, notes)
 	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+		return mcpToolError("learning_review_failed", err.Error(), map[string]any{"entry_id": entryID, "rating": rating}), nil
 	}
 	return mcpJSON(review)
+}
+
+func mcpLearningArchive(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	entryID, err := req.RequireInt("entry_id")
+	if err != nil {
+		return mcpToolError("invalid_input", "entry_id is required", nil), nil
+	}
+	svc, err := learningService(ctx)
+	if err != nil {
+		return mcpToolError("learning_service_unavailable", err.Error(), nil), nil
+	}
+	defer svc.Close()
+	entry, err := svc.Archive(ctx, int64(entryID))
+	if err != nil && strings.Contains(err.Error(), "active learning entry not found") {
+		return mcpToolError("entry_not_found", err.Error(), map[string]any{"entry_id": entryID}), nil
+	}
+	if err != nil {
+		return mcpToolError("learning_archive_failed", err.Error(), map[string]any{"entry_id": entryID}), nil
+	}
+	return mcpJSON(entry)
+}
+
+func mcpLearningStatusResource(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	svc, err := learningService(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer svc.Close()
+	status, err := svc.Status(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return mcpJSONResource(req.Params.URI, status)
+}
+
+func mcpLearningDueResource(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	svc, err := learningService(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer svc.Close()
+	entries, err := svc.Due(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return mcpJSONResource(req.Params.URI, entries)
+}
+
+func mcpLearningEntryResource(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	const prefix = "overseer://learning/entries/"
+	rawID := strings.TrimPrefix(req.Params.URI, prefix)
+	if rawID == req.Params.URI || rawID == "" {
+		return nil, fmt.Errorf("learning entry resource URI must match %s{entry_id}", prefix)
+	}
+	entryID, err := strconv.ParseInt(rawID, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("entry_id must be an integer")
+	}
+	svc, err := learningService(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer svc.Close()
+	detail, err := svc.Detail(ctx, entryID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("learning entry not found: %d", entryID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return mcpJSONResource(req.Params.URI, detail)
+}
+
+func mcpLearningReviewSessionPrompt(_ context.Context, _ mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	return mcp.NewGetPromptResult(
+		"Assistant-led learning review session",
+		[]mcp.PromptMessage{
+			mcp.NewPromptMessage(
+				mcp.RoleUser,
+				mcp.NewTextContent("Run a short learning review session. Read the due learning reviews resource first, ask one quiz question at a time, wait for my answer, then record each review only after I provide or confirm a rating."),
+			),
+			mcp.NewPromptMessage(
+				mcp.RoleAssistant,
+				mcp.NewResourceLink("overseer://learning/due", "Due Learning Reviews", "Current learning entries due for review", "application/json"),
+			),
+		},
+	), nil
 }
 
 func mcpJSON(v any) (*mcp.CallToolResult, error) {
@@ -346,4 +546,32 @@ func mcpJSON(v any) (*mcp.CallToolResult, error) {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	return mcp.NewToolResultText(string(b)), nil
+}
+
+type mcpErrorPayload struct {
+	Code    string         `json:"code"`
+	Message string         `json:"message"`
+	Details map[string]any `json:"details,omitempty"`
+}
+
+func mcpToolError(code, message string, details map[string]any) *mcp.CallToolResult {
+	b, err := json.MarshalIndent(mcpErrorPayload{Code: code, Message: message, Details: details}, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(message)
+	}
+	return mcp.NewToolResultError(string(b))
+}
+
+func mcpJSONResource(uri string, v any) ([]mcp.ResourceContents, error) {
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return []mcp.ResourceContents{
+		mcp.TextResourceContents{
+			URI:      uri,
+			MIMEType: "application/json",
+			Text:     string(b),
+		},
+	}, nil
 }

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
@@ -62,6 +63,20 @@ var learnSearchCmd = &cobra.Command{
 	RunE:  runLearnSearch,
 }
 
+var learnShowCmd = &cobra.Command{
+	Use:   "show <entry-id>",
+	Short: "Show one learning entry with review history",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runLearnShow,
+}
+
+var learnArchiveCmd = &cobra.Command{
+	Use:   "archive <entry-id>",
+	Short: "Archive a learning entry",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runLearnArchive,
+}
+
 func init() {
 	learnAddCmd.Flags().StringVar(&learnAddOpts.source, "source", "", "Source URL, note, or context")
 	learnAddCmd.Flags().StringVar(&learnAddOpts.description, "description", "", "Learning entry description")
@@ -75,6 +90,8 @@ func init() {
 	learnCmd.AddCommand(learnReviewCmd)
 	learnCmd.AddCommand(learnStatusCmd)
 	learnCmd.AddCommand(learnSearchCmd)
+	learnCmd.AddCommand(learnShowCmd)
+	learnCmd.AddCommand(learnArchiveCmd)
 	rootCmd.AddCommand(learnCmd)
 }
 
@@ -326,6 +343,108 @@ func runLearnSearch(cmd *cobra.Command, args []string) error {
 		}
 	}
 	return nil
+}
+
+func runLearnShow(cmd *cobra.Command, args []string) error {
+	ctx := commandContext(cmd)
+	entryID, err := parseLearningEntryID(args[0])
+	if err != nil {
+		return err
+	}
+	svc, err := learningService(ctx)
+	if err != nil {
+		return err
+	}
+	defer svc.Close()
+	detail, err := svc.Detail(ctx, entryID)
+	if err != nil {
+		return err
+	}
+	if output.Format == "json" {
+		return output.PrintJSON(detail)
+	}
+	printLearningDetail(detail)
+	return nil
+}
+
+func runLearnArchive(cmd *cobra.Command, args []string) error {
+	ctx := commandContext(cmd)
+	entryID, err := parseLearningEntryID(args[0])
+	if err != nil {
+		return err
+	}
+	svc, err := learningService(ctx)
+	if err != nil {
+		return err
+	}
+	defer svc.Close()
+	entry, err := svc.Archive(ctx, entryID)
+	if err != nil {
+		return err
+	}
+	if output.Format == "json" {
+		return output.PrintJSON(entry)
+	}
+	fmt.Printf("%s  archived learning entry #%d: %s\n", tui.StyleOK.Render("✓"), entry.ID, tui.StyleAccent.Render(entry.Topic))
+	return nil
+}
+
+func printLearningDetail(detail learning.EntryDetail) {
+	entry := detail.Entry
+	fmt.Println(tui.SectionHeader("learning entry", fmt.Sprintf("#%d", entry.ID)))
+	fmt.Println(tui.StyleAccent.Render(entry.Topic))
+	if entry.Source != "" {
+		fmt.Printf("source: %s\n", tui.StyleMuted.Render(entry.Source))
+	}
+	fmt.Printf("status: %s\n", entry.Status)
+	fmt.Printf("next review: %s (%d day interval)\n", entry.NextDueAt.Local().Format("2006-01-02"), entry.IntervalDays)
+	fmt.Println()
+	fmt.Println(entry.Description)
+	if len(entry.Questions) > 0 {
+		fmt.Println()
+		fmt.Println("quiz:")
+		for _, q := range entry.Questions {
+			fmt.Printf("  %d. %s\n", q.Position, q.Question)
+		}
+	}
+	printLearningReviewSummary(detail.ReviewSummary)
+	if len(detail.Reviews) > 0 {
+		fmt.Println()
+		fmt.Println("reviews:")
+		for _, r := range detail.Reviews {
+			line := fmt.Sprintf("  #%d  %s  %s  next %s (%d day interval)", r.ID, r.ReviewedAt.Local().Format("2006-01-02"), r.Rating, r.NextDueAt.Local().Format("2006-01-02"), r.IntervalDays)
+			fmt.Println(line)
+			if r.Notes != "" {
+				fmt.Printf("      %s\n", tui.StyleMuted.Render(r.Notes))
+			}
+		}
+	}
+}
+
+func printLearningReviewSummary(summary learning.ReviewSummary) {
+	if summary.TotalReviews == 0 {
+		return
+	}
+	fmt.Println()
+	fmt.Println("review summary:")
+	fmt.Printf("  total: %d  missed: %d  hard: %d  good: %d  easy: %d\n", summary.TotalReviews, summary.MissedCount, summary.HardCount, summary.GoodCount, summary.EasyCount)
+	if summary.LastReviewedAt != nil {
+		fmt.Printf("  last reviewed: %s\n", summary.LastReviewedAt.Local().Format("2006-01-02"))
+	}
+	if summary.ConsecutiveMissed > 0 || summary.ConsecutiveStruggled > 0 {
+		fmt.Printf("  current streak: %d missed, %d struggled\n", summary.ConsecutiveMissed, summary.ConsecutiveStruggled)
+	}
+	if summary.LeechCandidate {
+		fmt.Printf("  %s\n", tui.StyleWarn.Render("leech candidate: consider rewriting this entry"))
+	}
+}
+
+func parseLearningEntryID(raw string) (int64, error) {
+	entryID, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("entry-id must be an integer")
+	}
+	return entryID, nil
 }
 
 func cleanLearningQuestions(in []string) []string {

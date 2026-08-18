@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -54,11 +55,90 @@ func TestLearnAddAndStatusJSON(t *testing.T) {
 	if status.ActiveEntries != 1 {
 		t.Fatalf("ActiveEntries = %d, want 1", status.ActiveEntries)
 	}
+
+	learnReviewOpts.entryID = entry.ID
+	learnReviewOpts.rating = learning.RatingGood
+	learnReviewOpts.notes = "clear"
+	t.Cleanup(func() {
+		learnReviewOpts.entryID = 0
+		learnReviewOpts.rating = ""
+		learnReviewOpts.notes = ""
+	})
+	if _, err := captureStdout(func() error {
+		return runLearnReview(&cobra.Command{}, nil)
+	}); err != nil {
+		t.Fatalf("runLearnReview: %v", err)
+	}
+
+	showOut, err := captureStdout(func() error {
+		return runLearnShow(&cobra.Command{}, []string{strconv.FormatInt(entry.ID, 10)})
+	})
+	if err != nil {
+		t.Fatalf("runLearnShow: %v", err)
+	}
+	var detail learning.EntryDetail
+	if err := json.Unmarshal([]byte(showOut), &detail); err != nil {
+		t.Fatalf("unmarshal show output %q: %v", showOut, err)
+	}
+	if detail.Entry.ID != entry.ID {
+		t.Fatalf("detail entry = %#v", detail.Entry)
+	}
+	if len(detail.Reviews) != 1 || detail.Reviews[0].Rating != learning.RatingGood {
+		t.Fatalf("detail reviews = %#v", detail.Reviews)
+	}
+	if detail.ReviewSummary.TotalReviews != 1 || detail.ReviewSummary.GoodCount != 1 {
+		t.Fatalf("detail review summary = %#v", detail.ReviewSummary)
+	}
+
+	archiveOut, err := captureStdout(func() error {
+		return runLearnArchive(&cobra.Command{}, []string{strconv.FormatInt(entry.ID, 10)})
+	})
+	if err != nil {
+		t.Fatalf("runLearnArchive: %v", err)
+	}
+	var archived learning.Entry
+	if err := json.Unmarshal([]byte(archiveOut), &archived); err != nil {
+		t.Fatalf("unmarshal archive output %q: %v", archiveOut, err)
+	}
+	if archived.ID != entry.ID || archived.Status != learning.StatusArchived {
+		t.Fatalf("archived entry = %#v", archived)
+	}
+
+	statusOut, err = captureStdout(func() error {
+		return runLearnStatus(&cobra.Command{}, nil)
+	})
+	if err != nil {
+		t.Fatalf("runLearnStatus after archive: %v", err)
+	}
+	if err := json.Unmarshal([]byte(statusOut), &status); err != nil {
+		t.Fatalf("unmarshal status after archive output %q: %v", statusOut, err)
+	}
+	if status.ActiveEntries != 0 {
+		t.Fatalf("ActiveEntries after archive = %d, want 0", status.ActiveEntries)
+	}
 }
 
 func TestLearnSearchRequiresQuery(t *testing.T) {
 	if err := learnSearchCmd.Args(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "accepts 1 arg") {
 		t.Fatalf("learn search arg error = %v", err)
+	}
+}
+
+func TestLearnShowRequiresEntryID(t *testing.T) {
+	if err := learnShowCmd.Args(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "accepts 1 arg") {
+		t.Fatalf("learn show arg error = %v", err)
+	}
+	if err := runLearnShow(&cobra.Command{}, []string{"nope"}); err == nil || !strings.Contains(err.Error(), "entry-id must be an integer") {
+		t.Fatalf("learn show invalid id error = %v", err)
+	}
+}
+
+func TestLearnArchiveRequiresEntryID(t *testing.T) {
+	if err := learnArchiveCmd.Args(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "accepts 1 arg") {
+		t.Fatalf("learn archive arg error = %v", err)
+	}
+	if err := runLearnArchive(&cobra.Command{}, []string{"nope"}); err == nil || !strings.Contains(err.Error(), "entry-id must be an integer") {
+		t.Fatalf("learn archive invalid id error = %v", err)
 	}
 }
 

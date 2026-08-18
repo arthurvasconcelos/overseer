@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	_ "modernc.org/sqlite"
 )
@@ -56,6 +57,19 @@ type AddInput struct {
 	AllowDuplicate bool
 }
 
+type Draft struct {
+	Topic            string     `json:"topic"`
+	Source           string     `json:"source,omitempty"`
+	Description      string     `json:"description"`
+	Questions        []Question `json:"quiz"`
+	Duplicate        bool       `json:"duplicate"`
+	DuplicateReason  string     `json:"duplicate_reason,omitempty"`
+	NormalizedTopic  string     `json:"normalized_topic"`
+	NormalizedSource string     `json:"normalized_source,omitempty"`
+	WouldCreate      bool       `json:"would_create"`
+	ExistingEntry    *Entry     `json:"existing_entry,omitempty"`
+}
+
 type Review struct {
 	ID            int64     `json:"id"`
 	EntryID       int64     `json:"entry_id"`
@@ -66,6 +80,24 @@ type Review struct {
 	NextDueAt     time.Time `json:"next_due_at"`
 	IntervalDays  int       `json:"interval_days"`
 	Entry         *Entry    `json:"entry,omitempty"`
+}
+
+type ReviewSummary struct {
+	TotalReviews         int        `json:"total_reviews"`
+	MissedCount          int        `json:"missed_count"`
+	HardCount            int        `json:"hard_count"`
+	GoodCount            int        `json:"good_count"`
+	EasyCount            int        `json:"easy_count"`
+	ConsecutiveMissed    int        `json:"consecutive_missed"`
+	ConsecutiveStruggled int        `json:"consecutive_struggled"`
+	LastReviewedAt       *time.Time `json:"last_reviewed_at,omitempty"`
+	LeechCandidate       bool       `json:"leech_candidate"`
+}
+
+type EntryDetail struct {
+	Entry         Entry         `json:"entry"`
+	Reviews       []Review      `json:"reviews"`
+	ReviewSummary ReviewSummary `json:"review_summary"`
 }
 
 type Status struct {
@@ -198,22 +230,19 @@ func (s *Service) Add(ctx context.Context, input AddInput) (Entry, error) {
 
 	now := truncateSecond(s.now())
 	due := now.AddDate(0, 0, 1)
+	if !input.AllowDuplicate {
+		if _, _, found, err := s.FindActiveDuplicate(ctx, input.Topic, input.Source); err != nil {
+			return Entry{}, err
+		} else if found {
+			return Entry{}, fmt.Errorf("%w: %s", ErrDuplicateTopic, input.Topic)
+		}
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Entry{}, err
 	}
 	defer tx.Rollback()
-
-	if !input.AllowDuplicate {
-		var existing int
-		err := tx.QueryRowContext(ctx, `SELECT id FROM learning_entries WHERE status = ? AND topic = ? LIMIT 1`, StatusActive, input.Topic).Scan(&existing)
-		if err == nil {
-			return Entry{}, fmt.Errorf("%w: %s", ErrDuplicateTopic, input.Topic)
-		}
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return Entry{}, err
-		}
-	}
 
 	res, err := tx.ExecContext(ctx, `INSERT INTO learning_entries
 		(topic, source, description, status, next_due_at, interval_days, created_at, updated_at)
@@ -240,6 +269,65 @@ func (s *Service) Add(ctx context.Context, input AddInput) (Entry, error) {
 	return s.Get(ctx, id)
 }
 
+func (s *Service) Draft(ctx context.Context, input AddInput) (Draft, error) {
+	input.Topic = strings.TrimSpace(input.Topic)
+	input.Source = strings.TrimSpace(input.Source)
+	input.Description = strings.TrimSpace(input.Description)
+	input.Questions = cleanQuestions(input.Questions)
+	if err := validateAdd(input); err != nil {
+		return Draft{}, err
+	}
+	draft := Draft{
+		Topic:       input.Topic,
+		Source:      input.Source,
+		Description: input.Description,
+		Questions:   questionsFromStrings(input.Questions),
+		NormalizedTopic: normalizeLearningText(
+			input.Topic,
+		),
+		NormalizedSource: normalizeLearningText(input.Source),
+		WouldCreate:      true,
+	}
+	existing, reason, found, err := s.FindActiveDuplicate(ctx, input.Topic, input.Source)
+	if err != nil {
+		return Draft{}, err
+	}
+	if found {
+		draft.Duplicate = true
+		draft.DuplicateReason = reason
+		draft.WouldCreate = false
+		draft.ExistingEntry = &existing
+	}
+	return draft, nil
+}
+
+func (s *Service) FindActiveDuplicate(ctx context.Context, topic, source string) (Entry, string, bool, error) {
+	normalizedTopic := normalizeLearningText(topic)
+	if normalizedTopic == "" {
+		return Entry{}, "", false, nil
+	}
+	normalizedSource := normalizeLearningText(source)
+	rows, err := s.db.QueryContext(ctx, entrySelectSQL()+` WHERE e.status = ? ORDER BY e.id ASC`, StatusActive)
+	if err != nil {
+		return Entry{}, "", false, err
+	}
+	defer rows.Close()
+	entries, err := scanEntries(ctx, s.db, rows)
+	if err != nil {
+		return Entry{}, "", false, err
+	}
+	for _, entry := range entries {
+		if normalizeLearningText(entry.Topic) != normalizedTopic {
+			continue
+		}
+		if normalizedSource != "" && normalizeLearningText(entry.Source) == normalizedSource {
+			return entry, "normalized_topic_and_source", true, nil
+		}
+		return entry, "normalized_topic", true, nil
+	}
+	return Entry{}, "", false, nil
+}
+
 func (s *Service) Get(ctx context.Context, id int64) (Entry, error) {
 	rows, err := s.db.QueryContext(ctx, entrySelectSQL()+` WHERE e.id = ?`, id)
 	if err != nil {
@@ -254,6 +342,72 @@ func (s *Service) Get(ctx context.Context, id int64) (Entry, error) {
 		return Entry{}, sql.ErrNoRows
 	}
 	return entries[0], nil
+}
+
+func (s *Service) Detail(ctx context.Context, id int64) (EntryDetail, error) {
+	entry, err := s.Get(ctx, id)
+	if err != nil {
+		return EntryDetail{}, err
+	}
+	reviews, err := s.Reviews(ctx, id)
+	if err != nil {
+		return EntryDetail{}, err
+	}
+	return EntryDetail{Entry: entry, Reviews: reviews, ReviewSummary: summarizeReviews(reviews)}, nil
+}
+
+func (s *Service) Archive(ctx context.Context, id int64) (Entry, error) {
+	now := truncateSecond(s.now())
+	res, err := s.db.ExecContext(ctx, `UPDATE learning_entries SET status = ?, updated_at = ? WHERE id = ? AND status = ?`,
+		StatusArchived, formatTime(now), id, StatusActive)
+	if err != nil {
+		return Entry{}, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return Entry{}, err
+	}
+	if affected == 0 {
+		return Entry{}, fmt.Errorf("active learning entry not found: %d", id)
+	}
+	return s.Get(ctx, id)
+}
+
+func (s *Service) Reviews(ctx context.Context, entryID int64) ([]Review, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, entry_id, reviewed_at, rating, notes, previous_due_at, next_due_at, interval_days
+		FROM learning_reviews
+		WHERE entry_id = ?
+		ORDER BY reviewed_at DESC, id DESC`, entryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var reviews []Review
+	for rows.Next() {
+		var r Review
+		var reviewedAt, previousDueAt, nextDueAt string
+		if err := rows.Scan(&r.ID, &r.EntryID, &reviewedAt, &r.Rating, &r.Notes, &previousDueAt, &nextDueAt, &r.IntervalDays); err != nil {
+			return nil, err
+		}
+		var err error
+		if r.ReviewedAt, err = parseTime(reviewedAt); err != nil {
+			return nil, err
+		}
+		if r.PreviousDueAt, err = parseTime(previousDueAt); err != nil {
+			return nil, err
+		}
+		if r.NextDueAt, err = parseTime(nextDueAt); err != nil {
+			return nil, err
+		}
+		reviews = append(reviews, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if reviews == nil {
+		return []Review{}, nil
+	}
+	return reviews, nil
 }
 
 func (s *Service) Due(ctx context.Context) ([]Entry, error) {
@@ -424,6 +578,60 @@ func cleanQuestions(in []string) []string {
 		}
 	}
 	return out
+}
+
+func questionsFromStrings(in []string) []Question {
+	qs := make([]Question, 0, len(in))
+	for i, q := range in {
+		qs = append(qs, Question{Position: i + 1, Question: q})
+	}
+	return qs
+}
+
+func summarizeReviews(reviews []Review) ReviewSummary {
+	var summary ReviewSummary
+	for i, review := range reviews {
+		summary.TotalReviews++
+		switch review.Rating {
+		case RatingMissed:
+			summary.MissedCount++
+		case RatingHard:
+			summary.HardCount++
+		case RatingGood:
+			summary.GoodCount++
+		case RatingEasy:
+			summary.EasyCount++
+		}
+		if i == 0 {
+			t := review.ReviewedAt
+			summary.LastReviewedAt = &t
+		}
+	}
+	for _, review := range reviews {
+		if review.Rating != RatingMissed {
+			break
+		}
+		summary.ConsecutiveMissed++
+	}
+	for _, review := range reviews {
+		if review.Rating != RatingMissed && review.Rating != RatingHard {
+			break
+		}
+		summary.ConsecutiveStruggled++
+	}
+	summary.LeechCandidate = summary.MissedCount >= 3 || summary.ConsecutiveMissed >= 2 || summary.ConsecutiveStruggled >= 4
+	return summary
+}
+
+func normalizeLearningText(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.Map(func(r rune) rune {
+		if unicode.IsPunct(r) || unicode.IsSymbol(r) {
+			return ' '
+		}
+		return r
+	}, s)
+	return strings.Join(strings.Fields(s), " ")
 }
 
 func entrySelectSQL() string {

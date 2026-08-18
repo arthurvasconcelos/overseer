@@ -15,6 +15,8 @@ Capture and review structured learning entries stored in the brain at `overseer/
 | `overseer learn review` | Run an interactive review for due entries, or review a specific item with flags. |
 | `overseer learn status` | Show active entry count, due count, upcoming reviews, and recent review count. |
 | `overseer learn search <query>` | Search topics, sources, descriptions, and quiz questions. |
+| `overseer learn show <entry-id>` | Show one learning entry with quiz questions, schedule, review summary, and review history. |
+| `overseer learn archive <entry-id>` | Archive an active learning entry. |
 
 ## JSON output
 
@@ -24,6 +26,8 @@ Structured commands support the global `--format json` flag:
 overseer learn due --format json
 overseer learn status --format json
 overseer learn search sqlite --format json
+overseer learn show 1 --format json
+overseer learn archive 1 --format json
 ```
 
 ## Non-interactive add
@@ -35,7 +39,7 @@ overseer learn add "SQLite indexes" \
   --quiz "What do indexes trade for faster lookups?"
 ```
 
-Active topics must be unique by exact topic match. Use `--allow-duplicate` to bypass that guard.
+Active topics must be unique by normalized topic match. Normalization ignores casing, repeated whitespace, and simple punctuation. Use `--allow-duplicate` to bypass that guard.
 
 ## Future extensions
 

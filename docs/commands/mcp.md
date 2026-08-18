@@ -61,10 +61,13 @@ which overseer
 | `run_command` | Run a shell command with secrets injected |
 | `run_note_search` | Search the Obsidian vault |
 | `learning_add` | Add a structured learning entry |
+| `learning_draft` | Validate and preview a learning entry without saving it |
 | `learning_due` | Return learning entries due for review |
 | `learning_search` | Search learning entries |
+| `learning_get` | Return one learning entry with review summary and review history |
 | `learning_status` | Return learning counts and upcoming schedule |
 | `learning_review` | Record a learning review and return the updated schedule |
+| `learning_archive` | Archive an active learning entry |
 
 ### `run_command` parameters
 
@@ -86,11 +89,26 @@ which overseer
 | `quiz` | Yes | Array of quiz questions |
 | `source` | No | Source URL, note, or context |
 
+`learning_draft`
+
+| Parameter | Required | Description |
+|---|---|---|
+| `topic` | Yes | Learning topic |
+| `description` | Yes | Learning entry description |
+| `quiz` | Yes | Array of quiz questions |
+| `source` | No | Source URL, note, or context |
+
 `learning_search`
 
 | Parameter | Required | Description |
 |---|---|---|
 | `query` | Yes | Search text matched against topic, source, description, and quiz questions |
+
+`learning_get`
+
+| Parameter | Required | Description |
+|---|---|---|
+| `entry_id` | Yes | Learning entry ID |
 
 `learning_review`
 
@@ -100,7 +118,29 @@ which overseer
 | `rating` | Yes | One of `missed`, `hard`, `good`, or `easy` |
 | `notes` | No | Optional review notes |
 
+`learning_archive`
+
+| Parameter | Required | Description |
+|---|---|---|
+| `entry_id` | Yes | Learning entry ID |
+
 `learning_due` and `learning_status` do not require parameters.
+
+Learning tool errors are returned as JSON text with `code`, `message`, and optional `details` fields.
+
+## Available MCP resources
+
+| Resource | Description |
+|---|---|
+| `overseer://learning/status` | Current learning counts and upcoming schedule as JSON |
+| `overseer://learning/due` | Learning entries due for review as JSON |
+| `overseer://learning/entries/{entry_id}` | One learning entry with review summary and review history as JSON |
+
+## Available MCP prompts
+
+| Prompt | Description |
+|---|---|
+| `learning_review_session` | Prepare an assistant-led review session using due learning entries |
 
 ## Alternative: context dump
 

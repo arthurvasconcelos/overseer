@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -103,6 +104,17 @@ func TestServiceAddSearchDueStatusReview(t *testing.T) {
 		t.Fatalf("review next due = %s, want %s", review.NextDueAt, now.AddDate(0, 0, 4))
 	}
 
+	detail, err := svc.Detail(ctx, entry.ID)
+	if err != nil {
+		t.Fatalf("Detail: %v", err)
+	}
+	if detail.Entry.ID != entry.ID {
+		t.Fatalf("Detail entry = %#v", detail.Entry)
+	}
+	if len(detail.Reviews) != 1 || detail.Reviews[0].ID != review.ID || detail.Reviews[0].Entry != nil {
+		t.Fatalf("Detail reviews = %#v", detail.Reviews)
+	}
+
 	status, err := svc.Status(ctx)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
@@ -141,6 +153,189 @@ func TestNextIntervalDays(t *testing.T) {
 		if got := NextIntervalDays(tt.current, tt.rating); got != tt.want {
 			t.Fatalf("NextIntervalDays(%d, %q) = %d, want %d", tt.current, tt.rating, got, tt.want)
 		}
+	}
+}
+
+func TestServiceArchive(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 1, 9, 0, 0, 0, time.UTC)
+	svc := testService(t, now)
+
+	entry, err := svc.Add(ctx, AddInput{
+		Topic:       "archive me",
+		Description: "entry to archive",
+		Questions:   []string{"archive?"},
+	})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	svc.now = func() time.Time { return now.Add(time.Hour) }
+	archived, err := svc.Archive(ctx, entry.ID)
+	if err != nil {
+		t.Fatalf("Archive: %v", err)
+	}
+	if archived.Status != StatusArchived {
+		t.Fatalf("archived status = %q, want %q", archived.Status, StatusArchived)
+	}
+	if !archived.UpdatedAt.Equal(now.Add(time.Hour)) {
+		t.Fatalf("archived updated at = %s, want %s", archived.UpdatedAt, now.Add(time.Hour))
+	}
+
+	status, err := svc.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if status.ActiveEntries != 0 {
+		t.Fatalf("ActiveEntries = %d, want 0", status.ActiveEntries)
+	}
+
+	if _, err := svc.Archive(ctx, entry.ID); err == nil || !strings.Contains(err.Error(), "active learning entry not found") {
+		t.Fatalf("second Archive error = %v", err)
+	}
+}
+
+func TestServiceDraft(t *testing.T) {
+	ctx := context.Background()
+	svc := testService(t, time.Date(2026, 5, 1, 9, 0, 0, 0, time.UTC))
+
+	draft, err := svc.Draft(ctx, AddInput{
+		Topic:       "  Draft topic  ",
+		Source:      " notes ",
+		Description: "  draft description  ",
+		Questions:   []string{" first? ", "", "second?"},
+	})
+	if err != nil {
+		t.Fatalf("Draft: %v", err)
+	}
+	if draft.Topic != "Draft topic" || draft.Source != "notes" || draft.Description != "draft description" {
+		t.Fatalf("draft = %#v", draft)
+	}
+	if len(draft.Questions) != 2 || draft.Questions[0].Position != 1 || draft.Questions[0].Question != "first?" {
+		t.Fatalf("draft questions = %#v", draft.Questions)
+	}
+	if draft.Duplicate || !draft.WouldCreate || draft.ExistingEntry != nil {
+		t.Fatalf("draft duplicate fields = %#v", draft)
+	}
+
+	status, err := svc.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if status.ActiveEntries != 0 {
+		t.Fatalf("ActiveEntries after draft = %d, want 0", status.ActiveEntries)
+	}
+
+	entry, err := svc.Add(ctx, AddInput{
+		Topic:       "Draft topic",
+		Description: "saved",
+		Questions:   []string{"saved?"},
+	})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	duplicateDraft, err := svc.Draft(ctx, AddInput{
+		Topic:       "Draft topic",
+		Description: "duplicate",
+		Questions:   []string{"duplicate?"},
+	})
+	if err != nil {
+		t.Fatalf("duplicate Draft: %v", err)
+	}
+	if !duplicateDraft.Duplicate || duplicateDraft.WouldCreate || duplicateDraft.ExistingEntry == nil || duplicateDraft.ExistingEntry.ID != entry.ID {
+		t.Fatalf("duplicate draft = %#v", duplicateDraft)
+	}
+	if duplicateDraft.DuplicateReason != "normalized_topic" || duplicateDraft.NormalizedTopic != "draft topic" {
+		t.Fatalf("duplicate draft normalization = %#v", duplicateDraft)
+	}
+}
+
+func TestServiceNormalizedDuplicateDetection(t *testing.T) {
+	ctx := context.Background()
+	svc := testService(t, time.Date(2026, 5, 1, 9, 0, 0, 0, time.UTC))
+
+	entry, err := svc.Add(ctx, AddInput{
+		Topic:       "SQLite indexes",
+		Source:      "DB notes",
+		Description: "Indexes speed reads.",
+		Questions:   []string{"What do indexes speed up?"},
+	})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	if _, err := svc.Add(ctx, AddInput{
+		Topic:       " sqlite   indexes! ",
+		Description: "duplicate by normalized topic",
+		Questions:   []string{"duplicate?"},
+	}); !errors.Is(err, ErrDuplicateTopic) {
+		t.Fatalf("normalized duplicate Add error = %v, want ErrDuplicateTopic", err)
+	}
+
+	duplicateDraft, err := svc.Draft(ctx, AddInput{
+		Topic:       "SQLITE, indexes",
+		Source:      "db notes",
+		Description: "duplicate draft",
+		Questions:   []string{"duplicate?"},
+	})
+	if err != nil {
+		t.Fatalf("Draft: %v", err)
+	}
+	if !duplicateDraft.Duplicate || duplicateDraft.DuplicateReason != "normalized_topic_and_source" || duplicateDraft.ExistingEntry == nil || duplicateDraft.ExistingEntry.ID != entry.ID {
+		t.Fatalf("duplicate draft = %#v", duplicateDraft)
+	}
+
+	if _, err := svc.Archive(ctx, entry.ID); err != nil {
+		t.Fatalf("Archive: %v", err)
+	}
+	if _, err := svc.Add(ctx, AddInput{
+		Topic:       "sqlite indexes",
+		Description: "allowed after archive",
+		Questions:   []string{"allowed?"},
+	}); err != nil {
+		t.Fatalf("Add after archive: %v", err)
+	}
+}
+
+func TestServiceReviewSummary(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 1, 9, 0, 0, 0, time.UTC)
+	svc := testService(t, now)
+
+	entry, err := svc.Add(ctx, AddInput{
+		Topic:       "leech candidate",
+		Description: "missed repeatedly",
+		Questions:   []string{"question?"},
+	})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	ratings := []string{RatingMissed, RatingHard, RatingMissed, RatingMissed}
+	for i, rating := range ratings {
+		reviewTime := now.AddDate(0, 0, i+1)
+		svc.now = func() time.Time { return reviewTime }
+		if _, err := svc.Review(ctx, entry.ID, rating, ""); err != nil {
+			t.Fatalf("Review %d: %v", i, err)
+		}
+	}
+
+	detail, err := svc.Detail(ctx, entry.ID)
+	if err != nil {
+		t.Fatalf("Detail: %v", err)
+	}
+	summary := detail.ReviewSummary
+	if summary.TotalReviews != 4 || summary.MissedCount != 3 || summary.HardCount != 1 || summary.GoodCount != 0 || summary.EasyCount != 0 {
+		t.Fatalf("summary counts = %#v", summary)
+	}
+	if summary.ConsecutiveMissed != 2 || summary.ConsecutiveStruggled != 4 {
+		t.Fatalf("summary streaks = %#v", summary)
+	}
+	if summary.LastReviewedAt == nil || !summary.LastReviewedAt.Equal(now.AddDate(0, 0, 4)) {
+		t.Fatalf("last reviewed at = %#v, want %s", summary.LastReviewedAt, now.AddDate(0, 0, 4))
+	}
+	if !summary.LeechCandidate {
+		t.Fatalf("LeechCandidate = false, want true")
 	}
 }
 
