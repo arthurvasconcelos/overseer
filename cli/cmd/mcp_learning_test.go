@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -437,5 +438,33 @@ func TestMCPLearningEditErrors(t *testing.T) {
 				t.Fatalf("error code = %q, want %q", code, tc.code)
 			}
 		})
+	}
+}
+
+func TestMCPAdvertisesEveryLearningTool(t *testing.T) {
+	advertised := newMCPServer("overseer").ListTools()
+	want := []string{
+		"learning_add",
+		"learning_archive",
+		"learning_draft",
+		"learning_due",
+		"learning_edit",
+		"learning_get",
+		"learning_review",
+		"learning_search",
+		"learning_status",
+	}
+	for _, name := range want {
+		if _, ok := advertised[name]; !ok {
+			t.Errorf("tool %q has a handler but is not advertised by the MCP server", name)
+		}
+	}
+	for name := range advertised {
+		if !strings.HasPrefix(name, "learning_") {
+			continue
+		}
+		if !slices.Contains(want, name) {
+			t.Errorf("tool %q is advertised but not covered by this test", name)
+		}
 	}
 }

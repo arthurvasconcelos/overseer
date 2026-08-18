@@ -65,6 +65,10 @@ func runMCP(_ *cobra.Command, _ []string) error {
 		fmt.Fprintln(os.Stderr, "")
 	}
 
+	return server.ServeStdio(newMCPServer(self))
+}
+
+func newMCPServer(self string) *server.MCPServer {
 	s := server.NewMCPServer("overseer", Version, server.WithInstructions(mcpServerInstructions))
 
 	s.AddTool(
@@ -292,7 +296,7 @@ func runMCP(_ *cobra.Command, _ []string) error {
 		mcpLearningReviewSessionPrompt,
 	)
 
-	return server.ServeStdio(s)
+	return s
 }
 
 func isTerminal(f *os.File) bool {
