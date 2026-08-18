@@ -63,6 +63,7 @@ which overseer
 | `run_journal_context` | Gather one day's activity for the daily note |
 | `learning_add` | Add a structured learning entry |
 | `learning_draft` | Validate and preview a learning entry without saving it |
+| `learning_edit` | Correct an existing learning entry in place, preserving id, history, and schedule |
 | `learning_due` | Return learning entries due for review |
 | `learning_search` | Search learning entries |
 | `learning_get` | Return one learning entry with review summary and review history |
@@ -110,6 +111,21 @@ than failing the call.
 | `description` | Yes | Learning entry description |
 | `quiz` | Yes | Array of quiz questions |
 | `source` | No | Source URL, note, or context |
+
+`learning_edit`
+
+| Parameter | Required | Description |
+|---|---|---|
+| `entry_id` | Yes | Learning entry ID |
+| `topic` | No | Replacement topic |
+| `description` | No | Replacement description |
+| `quiz` | No | Replacement quiz questions — replaces every existing question |
+| `source` | No | Replacement source URL, note, or context |
+| `revision_note` | No | Why the entry changed; surfaced at the next review |
+
+At least one of `topic`, `description`, `quiz`, or `source` must be present. Fields you omit are
+left untouched, and the entry keeps its id, review history, and review schedule. Prefer this over
+archive-and-recapture when an entry is simply wrong.
 
 `learning_search`
 

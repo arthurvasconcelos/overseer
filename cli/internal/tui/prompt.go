@@ -29,3 +29,24 @@ func Prompt(label, defaultVal, placeholder string) (string, error) {
 	}
 	return val, nil
 }
+
+// PromptText displays an interactive multi-line text input and returns the entered value.
+// The value starts as defaultVal so existing text can be edited in place, and ctrl+e opens
+// $EDITOR for longer content. Returns an error if the user cancels.
+func PromptText(label, defaultVal, placeholder string) (string, error) {
+	val := defaultVal
+	err := huh.NewText().
+		Title(label).
+		Value(&val).
+		Placeholder(placeholder).
+		Lines(8).
+		Run()
+
+	if errors.Is(err, huh.ErrUserAborted) {
+		return "", fmt.Errorf("cancelled")
+	}
+	if err != nil {
+		return "", fmt.Errorf("tui: %w", err)
+	}
+	return val, nil
+}

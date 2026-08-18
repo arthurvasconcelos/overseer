@@ -42,6 +42,8 @@ type Entry struct {
 	IntervalDays int        `json:"interval_days"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
+	CorrectedAt  *time.Time `json:"corrected_at,omitempty"`
+	RevisionNote string     `json:"revision_note,omitempty"`
 }
 
 type Question struct {
@@ -54,6 +56,15 @@ type AddInput struct {
 	Source         string
 	Description    string
 	Questions      []string
+	AllowDuplicate bool
+}
+
+type EditInput struct {
+	Topic          *string
+	Source         *string
+	Description    *string
+	Questions      *[]string
+	RevisionNote   string
 	AllowDuplicate bool
 }
 
@@ -214,7 +225,31 @@ func (s *Service) Migrate(ctx context.Context) error {
 			_ = tx.Rollback()
 			return fmt.Errorf("migrating learning database: %w", err)
 		}
-		return tx.Commit()
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		version = 2
+	}
+	if version < 3 {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		stmts := []string{
+			`ALTER TABLE learning_entries ADD COLUMN corrected_at TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE learning_entries ADD COLUMN revision_note TEXT NOT NULL DEFAULT ''`,
+			`PRAGMA user_version = 3`,
+		}
+		for _, stmt := range stmts {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
+				_ = tx.Rollback()
+				return fmt.Errorf("migrating learning database: %w", err)
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		version = 3
 	}
 	return nil
 }
@@ -301,7 +336,85 @@ func (s *Service) Draft(ctx context.Context, input AddInput) (Draft, error) {
 	return draft, nil
 }
 
+func (s *Service) Update(ctx context.Context, id int64, input EditInput) (Entry, error) {
+	if input.Topic == nil && input.Source == nil && input.Description == nil && input.Questions == nil {
+		return Entry{}, fmt.Errorf("no changes provided: set at least one of topic, source, description, quiz")
+	}
+	entry, err := s.Get(ctx, id)
+	if err != nil {
+		return Entry{}, err
+	}
+
+	updated := AddInput{
+		Topic:       entry.Topic,
+		Source:      entry.Source,
+		Description: entry.Description,
+		Questions:   questionStrings(entry.Questions),
+	}
+	if input.Topic != nil {
+		updated.Topic = strings.TrimSpace(*input.Topic)
+	}
+	if input.Source != nil {
+		updated.Source = strings.TrimSpace(*input.Source)
+	}
+	if input.Description != nil {
+		updated.Description = strings.TrimSpace(*input.Description)
+	}
+	if input.Questions != nil {
+		updated.Questions = cleanQuestions(*input.Questions)
+	}
+	if err := validateAdd(updated); err != nil {
+		return Entry{}, err
+	}
+
+	topicChanged := normalizeLearningText(updated.Topic) != normalizeLearningText(entry.Topic)
+	sourceChanged := normalizeLearningText(updated.Source) != normalizeLearningText(entry.Source)
+	if !input.AllowDuplicate && entry.Status == StatusActive && (topicChanged || sourceChanged) {
+		if _, _, found, err := s.findActiveDuplicate(ctx, updated.Topic, updated.Source, id); err != nil {
+			return Entry{}, err
+		} else if found {
+			return Entry{}, fmt.Errorf("%w: %s", ErrDuplicateTopic, updated.Topic)
+		}
+	}
+
+	now := truncateSecond(s.now())
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Entry{}, err
+	}
+	defer tx.Rollback()
+
+	revisionNote := strings.TrimSpace(input.RevisionNote)
+	if revisionNote == "" {
+		revisionNote = entry.RevisionNote
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE learning_entries
+		SET topic = ?, source = ?, description = ?, updated_at = ?, corrected_at = ?, revision_note = ?
+		WHERE id = ?`,
+		updated.Topic, updated.Source, updated.Description, formatTime(now), formatTime(now), revisionNote, id); err != nil {
+		return Entry{}, err
+	}
+	if input.Questions != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM learning_questions WHERE entry_id = ?`, id); err != nil {
+			return Entry{}, err
+		}
+		for i, q := range updated.Questions {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO learning_questions (entry_id, question, position) VALUES (?, ?, ?)`, id, q, i+1); err != nil {
+				return Entry{}, err
+			}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return Entry{}, err
+	}
+	return s.Get(ctx, id)
+}
+
 func (s *Service) FindActiveDuplicate(ctx context.Context, topic, source string) (Entry, string, bool, error) {
+	return s.findActiveDuplicate(ctx, topic, source, 0)
+}
+
+func (s *Service) findActiveDuplicate(ctx context.Context, topic, source string, excludeID int64) (Entry, string, bool, error) {
 	normalizedTopic := normalizeLearningText(topic)
 	if normalizedTopic == "" {
 		return Entry{}, "", false, nil
@@ -317,6 +430,9 @@ func (s *Service) FindActiveDuplicate(ctx context.Context, topic, source string)
 		return Entry{}, "", false, err
 	}
 	for _, entry := range entries {
+		if entry.ID == excludeID {
+			continue
+		}
 		if normalizeLearningText(entry.Topic) != normalizedTopic {
 			continue
 		}
@@ -601,6 +717,14 @@ func questionsFromStrings(in []string) []Question {
 	return qs
 }
 
+func questionStrings(in []Question) []string {
+	out := make([]string, 0, len(in))
+	for _, q := range in {
+		out = append(out, q.Question)
+	}
+	return out
+}
+
 func summarizeReviews(reviews []Review) ReviewSummary {
 	var summary ReviewSummary
 	for i, review := range reviews {
@@ -648,15 +772,15 @@ func normalizeLearningText(s string) string {
 }
 
 func entrySelectSQL() string {
-	return `SELECT e.id, e.topic, e.source, e.description, e.status, e.next_due_at, e.interval_days, e.created_at, e.updated_at FROM learning_entries e`
+	return `SELECT e.id, e.topic, e.source, e.description, e.status, e.next_due_at, e.interval_days, e.created_at, e.updated_at, e.corrected_at, e.revision_note FROM learning_entries e`
 }
 
 func scanEntries(ctx context.Context, db *sql.DB, rows *sql.Rows) ([]Entry, error) {
 	var entries []Entry
 	for rows.Next() {
 		var e Entry
-		var due, created, updated string
-		if err := rows.Scan(&e.ID, &e.Topic, &e.Source, &e.Description, &e.Status, &due, &e.IntervalDays, &created, &updated); err != nil {
+		var due, created, updated, corrected string
+		if err := rows.Scan(&e.ID, &e.Topic, &e.Source, &e.Description, &e.Status, &due, &e.IntervalDays, &created, &updated, &corrected, &e.RevisionNote); err != nil {
 			return nil, err
 		}
 		var err error
@@ -668,6 +792,13 @@ func scanEntries(ctx context.Context, db *sql.DB, rows *sql.Rows) ([]Entry, erro
 		}
 		if e.UpdatedAt, err = parseTime(updated); err != nil {
 			return nil, err
+		}
+		if corrected != "" {
+			correctedAt, err := parseTime(corrected)
+			if err != nil {
+				return nil, err
+			}
+			e.CorrectedAt = &correctedAt
 		}
 		entries = append(entries, e)
 	}

@@ -24,8 +24,8 @@ func TestMigrateIdempotent(t *testing.T) {
 	if err := svc.db.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&version); err != nil {
 		t.Fatalf("PRAGMA user_version: %v", err)
 	}
-	if version != 2 {
-		t.Fatalf("user_version = %d, want 2", version)
+	if version != 3 {
+		t.Fatalf("user_version = %d, want 3", version)
 	}
 	if err := svc.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -375,4 +375,157 @@ func testService(t *testing.T, now time.Time) *Service {
 	svc.now = func() time.Time { return now }
 	t.Cleanup(func() { _ = svc.Close() })
 	return svc
+}
+
+func TestServiceUpdatePreservesScheduleAndHistory(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 19, 9, 0, 0, 0, time.UTC)
+	svc := testService(t, now)
+
+	entry, err := svc.Add(ctx, AddInput{
+		Topic:       "Conic gradient rim",
+		Source:      "labs note",
+		Description: "mask window is a ~68 degree arc",
+		Questions:   []string{"How wide is the window?", "Why is it not a border?"},
+	})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	svc.now = func() time.Time { return now.AddDate(0, 0, 1) }
+	if _, err := svc.Review(ctx, entry.ID, RatingGood, "first pass"); err != nil {
+		t.Fatalf("Review: %v", err)
+	}
+	reviewed, err := svc.Get(ctx, entry.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+
+	corrected := now.AddDate(0, 0, 2)
+	svc.now = func() time.Time { return corrected }
+	description := "mask window ramps from 180 to 320 degrees, ~138 degrees wide"
+	questions := []string{"How wide is the window?"}
+	updated, err := svc.Update(ctx, entry.ID, EditInput{
+		Description:  &description,
+		Questions:    &questions,
+		RevisionNote: "68 degree arc read only the plateau",
+	})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	if updated.ID != entry.ID {
+		t.Fatalf("ID = %d, want %d", updated.ID, entry.ID)
+	}
+	if updated.Description != description {
+		t.Fatalf("Description = %q", updated.Description)
+	}
+	if updated.Topic != entry.Topic || updated.Source != entry.Source {
+		t.Fatalf("untouched fields changed: topic %q source %q", updated.Topic, updated.Source)
+	}
+	if len(updated.Questions) != 1 || updated.Questions[0].Question != questions[0] || updated.Questions[0].Position != 1 {
+		t.Fatalf("Questions = %#v", updated.Questions)
+	}
+	if !updated.NextDueAt.Equal(reviewed.NextDueAt) || updated.IntervalDays != reviewed.IntervalDays {
+		t.Fatalf("schedule changed: due %s interval %d", updated.NextDueAt, updated.IntervalDays)
+	}
+	if !updated.CreatedAt.Equal(entry.CreatedAt) {
+		t.Fatalf("CreatedAt = %s, want %s", updated.CreatedAt, entry.CreatedAt)
+	}
+	if updated.CorrectedAt == nil || !updated.CorrectedAt.Equal(corrected) {
+		t.Fatalf("CorrectedAt = %v, want %s", updated.CorrectedAt, corrected)
+	}
+	if updated.RevisionNote != "68 degree arc read only the plateau" {
+		t.Fatalf("RevisionNote = %q", updated.RevisionNote)
+	}
+
+	reviews, err := svc.Reviews(ctx, entry.ID)
+	if err != nil {
+		t.Fatalf("Reviews: %v", err)
+	}
+	if len(reviews) != 1 || reviews[0].Notes != "first pass" {
+		t.Fatalf("review history lost: %#v", reviews)
+	}
+}
+
+func TestServiceUpdateValidation(t *testing.T) {
+	ctx := context.Background()
+	svc := testService(t, time.Date(2026, 8, 19, 9, 0, 0, 0, time.UTC))
+
+	entry, err := svc.Add(ctx, AddInput{Topic: "Alpha", Description: "desc", Questions: []string{"Q?"}})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	other, err := svc.Add(ctx, AddInput{Topic: "Beta", Description: "desc", Questions: []string{"Q?"}})
+	if err != nil {
+		t.Fatalf("Add other: %v", err)
+	}
+
+	if _, err := svc.Update(ctx, entry.ID, EditInput{RevisionNote: "note only"}); err == nil || !strings.Contains(err.Error(), "no changes provided") {
+		t.Fatalf("empty update error = %v", err)
+	}
+
+	blank := ""
+	if _, err := svc.Update(ctx, entry.ID, EditInput{Topic: &blank}); err == nil || !strings.Contains(err.Error(), "topic is required") {
+		t.Fatalf("blank topic error = %v", err)
+	}
+
+	noQuestions := []string{"  "}
+	if _, err := svc.Update(ctx, entry.ID, EditInput{Questions: &noQuestions}); err == nil || !strings.Contains(err.Error(), "at least one quiz question") {
+		t.Fatalf("empty quiz error = %v", err)
+	}
+
+	clash := "beta"
+	if _, err := svc.Update(ctx, entry.ID, EditInput{Topic: &clash}); !errors.Is(err, ErrDuplicateTopic) {
+		t.Fatalf("duplicate topic error = %v", err)
+	}
+	if _, err := svc.Update(ctx, entry.ID, EditInput{Topic: &clash, AllowDuplicate: true}); err != nil {
+		t.Fatalf("Update with AllowDuplicate: %v", err)
+	}
+
+	// Rewriting an entry to its own current topic must not be treated as a duplicate of itself.
+	sameTopic := "Beta"
+	if _, err := svc.Update(ctx, other.ID, EditInput{Topic: &sameTopic, RevisionNote: "no-op topic"}); err != nil {
+		t.Fatalf("self-topic update: %v", err)
+	}
+
+	if _, err := svc.Update(ctx, 9999, EditInput{Topic: &sameTopic}); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("missing entry error = %v", err)
+	}
+}
+
+func TestMigrateFromVersion2AddsCorrectionColumns(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "learning.db")
+
+	svc, err := Open(ctx, path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if _, err := svc.db.ExecContext(ctx, `ALTER TABLE learning_entries DROP COLUMN corrected_at`); err != nil {
+		t.Fatalf("drop corrected_at: %v", err)
+	}
+	if _, err := svc.db.ExecContext(ctx, `ALTER TABLE learning_entries DROP COLUMN revision_note`); err != nil {
+		t.Fatalf("drop revision_note: %v", err)
+	}
+	if _, err := svc.db.ExecContext(ctx, `PRAGMA user_version = 2`); err != nil {
+		t.Fatalf("reset user_version: %v", err)
+	}
+	if err := svc.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	reopened, err := Open(ctx, path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+
+	entry, err := reopened.Add(ctx, AddInput{Topic: "Upgraded", Description: "desc", Questions: []string{"Q?"}})
+	if err != nil {
+		t.Fatalf("Add after upgrade: %v", err)
+	}
+	if entry.CorrectedAt != nil || entry.RevisionNote != "" {
+		t.Fatalf("fresh entry carries correction metadata: %v %q", entry.CorrectedAt, entry.RevisionNote)
+	}
 }

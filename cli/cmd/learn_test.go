@@ -167,3 +167,139 @@ func captureStdout(fn func() error) (string, error) {
 	}
 	return buf.String(), nil
 }
+
+func TestLearnEditJSON(t *testing.T) {
+	brain := t.TempDir()
+	t.Setenv("OVERSEER_BRAIN", brain)
+	output.Format = "json"
+	t.Cleanup(func() {
+		output.Format = "text"
+		learnAddOpts.description = ""
+		learnAddOpts.questions = nil
+	})
+
+	learnAddOpts.description = "mask window is a ~68 degree arc"
+	learnAddOpts.questions = []string{"How wide is the window?", "Why is it not a border?"}
+	out, err := captureStdout(func() error {
+		return runLearnAdd(&cobra.Command{}, []string{"Conic gradient rim"})
+	})
+	if err != nil {
+		t.Fatalf("learn add: %v", err)
+	}
+	var added learning.Entry
+	if err := json.Unmarshal([]byte(out), &added); err != nil {
+		t.Fatalf("unmarshal add: %v", err)
+	}
+
+	cmd := newLearnEditTestCmd()
+	mustSetFlag(t, cmd, "description", "window ramps from 180 to 320 degrees")
+	mustSetFlag(t, cmd, "quiz", "How wide is the window?")
+	mustSetFlag(t, cmd, "note", "the 68 degree arc read only the plateau")
+	out, err = captureStdout(func() error {
+		return runLearnEdit(cmd, []string{strconv.FormatInt(added.ID, 10)})
+	})
+	if err != nil {
+		t.Fatalf("learn edit: %v", err)
+	}
+	var edited learning.Entry
+	if err := json.Unmarshal([]byte(out), &edited); err != nil {
+		t.Fatalf("unmarshal edit: %v", err)
+	}
+
+	if edited.ID != added.ID {
+		t.Fatalf("ID = %d, want %d", edited.ID, added.ID)
+	}
+	if edited.Topic != added.Topic {
+		t.Fatalf("Topic = %q, want unchanged %q", edited.Topic, added.Topic)
+	}
+	if edited.Description != "window ramps from 180 to 320 degrees" {
+		t.Fatalf("Description = %q", edited.Description)
+	}
+	if len(edited.Questions) != 1 {
+		t.Fatalf("Questions = %#v", edited.Questions)
+	}
+	if edited.RevisionNote != "the 68 degree arc read only the plateau" {
+		t.Fatalf("RevisionNote = %q", edited.RevisionNote)
+	}
+	if edited.CorrectedAt == nil {
+		t.Fatalf("CorrectedAt not recorded")
+	}
+	if !edited.NextDueAt.Equal(added.NextDueAt) {
+		t.Fatalf("NextDueAt = %s, want unchanged %s", edited.NextDueAt, added.NextDueAt)
+	}
+}
+
+func TestLearnEditClearsSourceAndRejectsBadID(t *testing.T) {
+	brain := t.TempDir()
+	t.Setenv("OVERSEER_BRAIN", brain)
+	output.Format = "json"
+	t.Cleanup(func() {
+		output.Format = "text"
+		learnAddOpts.source = ""
+		learnAddOpts.description = ""
+		learnAddOpts.questions = nil
+	})
+
+	learnAddOpts.source = "https://example.test/wrong"
+	learnAddOpts.description = "desc"
+	learnAddOpts.questions = []string{"Q?"}
+	if _, err := captureStdout(func() error {
+		return runLearnAdd(&cobra.Command{}, []string{"Alpha"})
+	}); err != nil {
+		t.Fatalf("learn add: %v", err)
+	}
+
+	cmd := newLearnEditTestCmd()
+	mustSetFlag(t, cmd, "source", "")
+	out, err := captureStdout(func() error {
+		return runLearnEdit(cmd, []string{"1"})
+	})
+	if err != nil {
+		t.Fatalf("learn edit: %v", err)
+	}
+	var edited learning.Entry
+	if err := json.Unmarshal([]byte(out), &edited); err != nil {
+		t.Fatalf("unmarshal edit: %v", err)
+	}
+	if edited.Source != "" {
+		t.Fatalf("Source = %q, want cleared", edited.Source)
+	}
+	if edited.Description != "desc" {
+		t.Fatalf("Description = %q, want unchanged", edited.Description)
+	}
+
+	if err := runLearnEdit(newLearnEditTestCmd(), []string{"nope"}); err == nil || !strings.Contains(err.Error(), "entry-id must be an integer") {
+		t.Fatalf("invalid id error = %v", err)
+	}
+
+	cmd = newLearnEditTestCmd()
+	mustSetFlag(t, cmd, "description", "orphan")
+	if err := runLearnEdit(cmd, []string{"4242"}); err == nil || !strings.Contains(err.Error(), "learning entry not found: 4242") {
+		t.Fatalf("missing entry error = %v", err)
+	}
+}
+
+func newLearnEditTestCmd() *cobra.Command {
+	learnEditOpts.topic = ""
+	learnEditOpts.source = ""
+	learnEditOpts.description = ""
+	learnEditOpts.questions = nil
+	learnEditOpts.note = ""
+	learnEditOpts.allowDuplicate = false
+
+	cmd := &cobra.Command{}
+	cmd.Flags().StringVar(&learnEditOpts.topic, "topic", "", "")
+	cmd.Flags().StringVar(&learnEditOpts.source, "source", "", "")
+	cmd.Flags().StringVar(&learnEditOpts.description, "description", "", "")
+	cmd.Flags().StringArrayVar(&learnEditOpts.questions, "quiz", nil, "")
+	cmd.Flags().StringVar(&learnEditOpts.note, "note", "", "")
+	cmd.Flags().BoolVar(&learnEditOpts.allowDuplicate, "allow-duplicate", false, "")
+	return cmd
+}
+
+func mustSetFlag(t *testing.T, cmd *cobra.Command, name, value string) {
+	t.Helper()
+	if err := cmd.Flags().Set(name, value); err != nil {
+		t.Fatalf("set --%s: %v", name, err)
+	}
+}

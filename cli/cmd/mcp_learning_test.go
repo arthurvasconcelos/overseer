@@ -351,3 +351,91 @@ func mcpErrorCode(t *testing.T, res *mcp.CallToolResult) string {
 	}
 	return payload.Code
 }
+
+func TestMCPLearningEdit(t *testing.T) {
+	t.Setenv("OVERSEER_BRAIN", t.TempDir())
+	ctx := context.Background()
+
+	addRes, err := mcpLearningAdd(ctx, mcp.CallToolRequest{
+		Params: mcp.CallToolParams{Arguments: map[string]any{
+			"topic":       "Conic gradient rim",
+			"description": "mask window is a ~68 degree arc",
+			"quiz":        []string{"How wide is the window?", "Why is it not a border?"},
+			"source":      "labs note",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("mcpLearningAdd: %v", err)
+	}
+	var added learning.Entry
+	if err := json.Unmarshal([]byte(mcpText(t, addRes)), &added); err != nil {
+		t.Fatalf("unmarshal added entry: %v", err)
+	}
+
+	editRes, err := mcpLearningEdit(ctx, mcp.CallToolRequest{
+		Params: mcp.CallToolParams{Arguments: map[string]any{
+			"entry_id":      float64(added.ID),
+			"description":   "window ramps from 180 to 320 degrees, ~138 degrees wide",
+			"quiz":          []string{"How wide is the window?"},
+			"revision_note": "the 68 degree arc read only the plateau",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("mcpLearningEdit: %v", err)
+	}
+	if editRes.IsError {
+		t.Fatalf("edit returned error: %s", mcpText(t, editRes))
+	}
+	var edited learning.Entry
+	if err := json.Unmarshal([]byte(mcpText(t, editRes)), &edited); err != nil {
+		t.Fatalf("unmarshal edited entry: %v", err)
+	}
+	if edited.ID != added.ID {
+		t.Fatalf("ID = %d, want %d", edited.ID, added.ID)
+	}
+	if edited.Topic != added.Topic || edited.Source != added.Source {
+		t.Fatalf("unpassed fields changed: topic %q source %q", edited.Topic, edited.Source)
+	}
+	if !strings.Contains(edited.Description, "138 degrees wide") {
+		t.Fatalf("Description = %q", edited.Description)
+	}
+	if len(edited.Questions) != 1 {
+		t.Fatalf("Questions = %#v", edited.Questions)
+	}
+	if edited.RevisionNote != "the 68 degree arc read only the plateau" || edited.CorrectedAt == nil {
+		t.Fatalf("correction metadata = %q %v", edited.RevisionNote, edited.CorrectedAt)
+	}
+	if !edited.NextDueAt.Equal(added.NextDueAt) {
+		t.Fatalf("NextDueAt = %s, want unchanged %s", edited.NextDueAt, added.NextDueAt)
+	}
+}
+
+func TestMCPLearningEditErrors(t *testing.T) {
+	t.Setenv("OVERSEER_BRAIN", t.TempDir())
+	ctx := context.Background()
+
+	cases := []struct {
+		name string
+		args map[string]any
+		code string
+	}{
+		{"missing entry_id", map[string]any{"description": "x"}, "invalid_input"},
+		{"no fields", map[string]any{"entry_id": float64(1), "revision_note": "why"}, "invalid_input"},
+		{"empty quiz", map[string]any{"entry_id": float64(1), "quiz": []string{"  "}}, "invalid_input"},
+		{"unknown entry", map[string]any{"entry_id": float64(4242), "description": "x"}, "entry_not_found"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := mcpLearningEdit(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: tc.args}})
+			if err != nil {
+				t.Fatalf("mcpLearningEdit: %v", err)
+			}
+			if !res.IsError {
+				t.Fatalf("IsError = false, want true")
+			}
+			if code := mcpErrorCode(t, res); code != tc.code {
+				t.Fatalf("error code = %q, want %q", code, tc.code)
+			}
+		})
+	}
+}

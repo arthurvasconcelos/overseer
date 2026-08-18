@@ -41,7 +41,9 @@ func init() {
 
 const mcpServerInstructions = `overseer is a personal local assistant server for development context, repository status, notes, command execution, and structured learning.
 
-For learning workflows, prefer the dedicated learning tools over shell commands. Use learning_status, learning_due, learning_search, and learning_get for read-heavy context before mutating data. Use learning_add only when the user wants to capture a durable learning entry. Use learning_review only after a review rating is known or explicitly provided.
+For learning workflows, prefer the dedicated learning tools over shell commands. Use learning_status, learning_due, learning_search, and learning_get for read-heavy context before mutating data. Use learning_draft to preview an entry and check for duplicates, and learning_add only when the user wants to capture a durable learning entry. Use learning_review only after a review rating is known or explicitly provided.
+
+If you discover that a saved entry is wrong, fix it with learning_edit rather than archiving and recapturing: editing in place keeps the entry id, review history, and schedule, and a revision_note is surfaced at the next review. Reserve learning_archive for entries that should stop being reviewed entirely.
 
 Tools named <plugin>_<tool> are contributed by external plugins and run that plugin's own command. Their output is whatever the plugin prints, so read it as text unless the description says otherwise.`
 
@@ -194,6 +196,19 @@ func runMCP(_ *cobra.Command, _ []string) error {
 			mcp.WithString("source", mcp.Description("Optional source URL, note, or context")),
 		),
 		mcpLearningDraft,
+	)
+
+	s.AddTool(
+		mcp.NewTool("learning_edit",
+			mcp.WithDescription("Correct an existing learning entry in place, preserving its id, review history, and schedule. Only the fields you pass are changed; passing quiz replaces every question."),
+			mcp.WithNumber("entry_id", mcp.Required(), mcp.Description("Learning entry ID")),
+			mcp.WithString("topic", mcp.Description("Replacement topic")),
+			mcp.WithString("description", mcp.Description("Replacement description")),
+			mcp.WithArray("quiz", mcp.Description("Replacement quiz questions (replaces all existing questions)"), mcp.WithStringItems()),
+			mcp.WithString("source", mcp.Description("Replacement source URL, note, or context")),
+			mcp.WithString("revision_note", mcp.Description("Why the entry changed; surfaced at the next review")),
+		),
+		mcpLearningEdit,
 	)
 
 	s.AddTool(
@@ -425,6 +440,53 @@ func mcpLearningDraft(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallTo
 		return mcpToolError("learning_draft_failed", err.Error(), nil), nil
 	}
 	return mcpJSON(draft)
+}
+
+func mcpLearningEdit(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	entryID, err := req.RequireInt("entry_id")
+	if err != nil {
+		return mcpToolError("invalid_input", "entry_id is required", nil), nil
+	}
+	args := req.GetArguments()
+	input := learning.EditInput{RevisionNote: req.GetString("revision_note", "")}
+	if _, ok := args["topic"]; ok {
+		topic := req.GetString("topic", "")
+		input.Topic = &topic
+	}
+	if _, ok := args["source"]; ok {
+		source := req.GetString("source", "")
+		input.Source = &source
+	}
+	if _, ok := args["description"]; ok {
+		description := req.GetString("description", "")
+		input.Description = &description
+	}
+	if _, ok := args["quiz"]; ok {
+		quiz := cleanLearningQuestions(req.GetStringSlice("quiz", nil))
+		if len(quiz) == 0 {
+			return mcpToolError("invalid_input", "quiz must include at least one question", map[string]any{"entry_id": entryID}), nil
+		}
+		input.Questions = &quiz
+	}
+	if input.Topic == nil && input.Source == nil && input.Description == nil && input.Questions == nil {
+		return mcpToolError("invalid_input", "provide at least one of topic, source, description, quiz", map[string]any{"entry_id": entryID}), nil
+	}
+	svc, err := learningService(ctx)
+	if err != nil {
+		return mcpToolError("learning_service_unavailable", err.Error(), nil), nil
+	}
+	defer svc.Close()
+	entry, err := svc.Update(ctx, int64(entryID), input)
+	if errors.Is(err, sql.ErrNoRows) {
+		return mcpToolError("entry_not_found", fmt.Sprintf("learning entry not found: %d", entryID), map[string]any{"entry_id": entryID}), nil
+	}
+	if errors.Is(err, learning.ErrDuplicateTopic) {
+		return mcpToolError("duplicate_topic", err.Error(), map[string]any{"entry_id": entryID}), nil
+	}
+	if err != nil {
+		return mcpToolError("learning_edit_failed", err.Error(), map[string]any{"entry_id": entryID}), nil
+	}
+	return mcpJSON(entry)
 }
 
 func mcpLearningDue(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {

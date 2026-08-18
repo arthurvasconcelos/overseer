@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -17,6 +19,15 @@ var learnAddOpts struct {
 	source         string
 	description    string
 	questions      []string
+	allowDuplicate bool
+}
+
+var learnEditOpts struct {
+	topic          string
+	source         string
+	description    string
+	questions      []string
+	note           string
 	allowDuplicate bool
 }
 
@@ -70,6 +81,17 @@ var learnShowCmd = &cobra.Command{
 	RunE:  runLearnShow,
 }
 
+var learnEditCmd = &cobra.Command{
+	Use:   "edit <entry-id>",
+	Short: "Edit a learning entry in place",
+	Long: `Edit a learning entry without losing its id, review history, or schedule.
+
+Only the fields you pass are changed. Passing --quiz replaces the whole quiz.
+With no field flags, the current values are offered for editing interactively.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runLearnEdit,
+}
+
 var learnArchiveCmd = &cobra.Command{
 	Use:   "archive <entry-id>",
 	Short: "Archive a learning entry",
@@ -82,6 +104,12 @@ func init() {
 	learnAddCmd.Flags().StringVar(&learnAddOpts.description, "description", "", "Learning entry description")
 	learnAddCmd.Flags().StringArrayVar(&learnAddOpts.questions, "quiz", nil, "Quiz question (repeatable)")
 	learnAddCmd.Flags().BoolVar(&learnAddOpts.allowDuplicate, "allow-duplicate", false, "Allow duplicate active topics")
+	learnEditCmd.Flags().StringVar(&learnEditOpts.topic, "topic", "", "Replace the topic")
+	learnEditCmd.Flags().StringVar(&learnEditOpts.source, "source", "", "Replace the source")
+	learnEditCmd.Flags().StringVar(&learnEditOpts.description, "description", "", "Replace the description")
+	learnEditCmd.Flags().StringArrayVar(&learnEditOpts.questions, "quiz", nil, "Replace the quiz with this question (repeatable)")
+	learnEditCmd.Flags().StringVar(&learnEditOpts.note, "note", "", "Why the entry changed")
+	learnEditCmd.Flags().BoolVar(&learnEditOpts.allowDuplicate, "allow-duplicate", false, "Allow the new topic to duplicate another active entry")
 	learnReviewCmd.Flags().Int64Var(&learnReviewOpts.entryID, "entry-id", 0, "Entry ID to review")
 	learnReviewCmd.Flags().StringVar(&learnReviewOpts.rating, "rating", "", "Review rating: missed, hard, good, easy")
 	learnReviewCmd.Flags().StringVar(&learnReviewOpts.notes, "notes", "", "Optional review notes")
@@ -91,6 +119,7 @@ func init() {
 	learnCmd.AddCommand(learnStatusCmd)
 	learnCmd.AddCommand(learnSearchCmd)
 	learnCmd.AddCommand(learnShowCmd)
+	learnCmd.AddCommand(learnEditCmd)
 	learnCmd.AddCommand(learnArchiveCmd)
 	rootCmd.AddCommand(learnCmd)
 }
@@ -365,6 +394,131 @@ func runLearnShow(cmd *cobra.Command, args []string) error {
 		return output.PrintJSON(detail)
 	}
 	printLearningDetail(detail)
+	return nil
+}
+
+func runLearnEdit(cmd *cobra.Command, args []string) error {
+	ctx := commandContext(cmd)
+	entryID, err := parseLearningEntryID(args[0])
+	if err != nil {
+		return err
+	}
+	svc, err := learningService(ctx)
+	if err != nil {
+		return err
+	}
+	defer svc.Close()
+
+	entry, err := svc.Get(ctx, entryID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("learning entry not found: %d", entryID)
+	}
+	if err != nil {
+		return err
+	}
+
+	input := learning.EditInput{
+		RevisionNote:   learnEditOpts.note,
+		AllowDuplicate: learnEditOpts.allowDuplicate,
+	}
+	flags := cmd.Flags()
+	if flags.Changed("topic") {
+		input.Topic = &learnEditOpts.topic
+	}
+	if flags.Changed("source") {
+		input.Source = &learnEditOpts.source
+	}
+	if flags.Changed("description") {
+		input.Description = &learnEditOpts.description
+	}
+	if flags.Changed("quiz") {
+		questions := cleanLearningQuestions(learnEditOpts.questions)
+		input.Questions = &questions
+	}
+
+	if input.Topic == nil && input.Source == nil && input.Description == nil && input.Questions == nil {
+		if err := promptLearningEdit(entry, &input); err != nil {
+			return err
+		}
+	}
+
+	updated, err := svc.Update(ctx, entryID, input)
+	if err != nil {
+		return err
+	}
+	if output.Format == "json" {
+		return output.PrintJSON(updated)
+	}
+	fmt.Printf("%s  edited #%d: %s\n", tui.StyleOK.Render("✓"), updated.ID, tui.StyleAccent.Render(updated.Topic))
+	if updated.RevisionNote != "" {
+		fmt.Printf("   note: %s\n", tui.StyleMuted.Render(updated.RevisionNote))
+	}
+	fmt.Printf("   next review unchanged: %s (%d day interval)\n", updated.NextDueAt.Local().Format("2006-01-02"), updated.IntervalDays)
+	return nil
+}
+
+func promptLearningEdit(entry learning.Entry, input *learning.EditInput) error {
+	fmt.Println(tui.SectionHeader("edit learning entry", fmt.Sprintf("#%d", entry.ID)))
+
+	topic, err := tui.Prompt("topic", entry.Topic, "")
+	if err != nil {
+		return err
+	}
+	input.Topic = &topic
+
+	source, err := tui.Prompt("source (optional)", entry.Source, "")
+	if err != nil {
+		return err
+	}
+	input.Source = &source
+
+	description, err := tui.PromptText("description", entry.Description, "")
+	if err != nil {
+		return err
+	}
+	input.Description = &description
+
+	rewriteQuiz, err := tui.Confirm("rewrite quiz questions?")
+	if err != nil {
+		return err
+	}
+	if rewriteQuiz {
+		questions := make([]string, 0, len(entry.Questions))
+		for _, q := range entry.Questions {
+			revised, err := tui.Prompt(fmt.Sprintf("quiz question %d (empty to drop)", q.Position), q.Question, "")
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(revised) != "" {
+				questions = append(questions, revised)
+			}
+		}
+		for {
+			another, err := tui.Confirm("add another quiz question?")
+			if err != nil {
+				return err
+			}
+			if !another {
+				break
+			}
+			question, err := tui.Prompt("quiz question", "", "")
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(question) != "" {
+				questions = append(questions, question)
+			}
+		}
+		input.Questions = &questions
+	}
+
+	if input.RevisionNote == "" {
+		note, err := tui.Prompt("revision note (optional)", "", "")
+		if err != nil {
+			return err
+		}
+		input.RevisionNote = note
+	}
 	return nil
 }
 
