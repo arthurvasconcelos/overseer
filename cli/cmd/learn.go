@@ -130,13 +130,14 @@ func runLearnAdd(cmd *cobra.Command, args []string) error {
 	description := learnAddOpts.description
 	questions := append([]string(nil), learnAddOpts.questions...)
 
+	supplied := topic != "" && description != "" && len(cleanLearningQuestions(questions)) > 0
 	if topic == "" {
 		topic, err = tui.Prompt("topic", "", "")
 		if err != nil {
 			return err
 		}
 	}
-	if source == "" {
+	if source == "" && !supplied {
 		source, err = tui.Prompt("source (optional)", "", "")
 		if err != nil {
 			return err
