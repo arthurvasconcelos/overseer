@@ -1,9 +1,12 @@
 package slack
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
+	"time"
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/output"
@@ -180,4 +183,29 @@ func sendCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// MentionsOn collects the mentions across every configured workspace for a
+// single day. A workspace that fails degrades into a warning so the rest of the
+// day still gathers.
+func MentionsOn(ctx context.Context, cfg *config.Config, day time.Time) ([]slackclient.Mention, []string) {
+	mentions := []slackclient.Mention{}
+	warnings := []string{}
+
+	for _, ws := range cfg.Integrations.Slack {
+		client, err := buildClient(ws)
+		if err != nil {
+			warnings = append(warnings, "slack/"+ws.Name+": "+err.Error())
+			continue
+		}
+		found, err := client.MentionsOn(ctx, day, ws.GroupHandles)
+		if err != nil {
+			warnings = append(warnings, "slack/"+ws.Name+": "+err.Error())
+			continue
+		}
+		mentions = append(mentions, found...)
+	}
+
+	sort.Slice(mentions, func(i, j int) bool { return mentions[i].Time.Before(mentions[j].Time) })
+	return mentions, warnings
 }

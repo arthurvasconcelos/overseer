@@ -18,6 +18,7 @@ import (
 	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/plugins/claude"
 	"github.com/arthurvasconcelos/overseer/internal/plugins/google"
+	"github.com/arthurvasconcelos/overseer/internal/plugins/slack"
 	"github.com/arthurvasconcelos/overseer/internal/secrets"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
@@ -55,6 +56,7 @@ type JournalContext struct {
 	Commits   []JournalCommit        `json:"commits"`
 	MRs       []JournalMR            `json:"mrs"`
 	Jira      []JournalIssue         `json:"jira"`
+	Slack     []JournalMention       `json:"slack"`
 	Worklog   []claude.WorklogRecord `json:"worklog"`
 	Learning  []JournalLearning      `json:"learning"`
 	Warnings  []string               `json:"warnings"`
@@ -89,6 +91,17 @@ type JournalIssue struct {
 	Summary string `json:"summary"`
 	Status  string `json:"status"`
 	URL     string `json:"url"`
+}
+
+// JournalMention is a Slack message that named the user or one of their
+// usergroups. Conversations often carry the decision that no commit records.
+type JournalMention struct {
+	Channel   string `json:"channel"`
+	Direct    bool   `json:"direct,omitempty"`
+	Author    string `json:"author,omitempty"`
+	Text      string `json:"text"`
+	Permalink string `json:"permalink,omitempty"`
+	Time      string `json:"time"`
 }
 
 type JournalLearning struct {
@@ -202,6 +215,14 @@ func runJournalContext(_ *cobra.Command, _ []string) error {
 		ctx, cancel := remoteContext()
 		defer cancel()
 		journal.Jira = gatherJira(ctx, cfg, dayStart, dayEnd, warnings)
+	}()
+
+	group.Add(1)
+	go func() {
+		defer group.Done()
+		ctx, cancel := remoteContext()
+		defer cancel()
+		journal.Slack = gatherSlack(ctx, cfg, day, warnings)
 	}()
 
 	group.Add(1)
@@ -419,6 +440,31 @@ func gatherJira(ctx context.Context, cfg *config.Config, dayStart, dayEnd time.T
 	return issues
 }
 
+// gatherSlack collects the day's mentions. They are the one source that carries
+// what was agreed with other people, which neither git nor Jira records.
+func gatherSlack(ctx context.Context, cfg *config.Config, day time.Time, warnings *warningSink) []JournalMention {
+	mentions := []JournalMention{}
+
+	found, issues := slack.MentionsOn(ctx, cfg, day)
+	for _, warning := range issues {
+		warnings.add(warning)
+	}
+	for _, mention := range found {
+		entry := JournalMention{
+			Channel:   mention.Channel,
+			Direct:    mention.Direct,
+			Author:    mention.Author,
+			Text:      mention.Text,
+			Permalink: mention.Permalink,
+		}
+		if !mention.Time.IsZero() {
+			entry.Time = mention.Time.Local().Format(time.RFC3339)
+		}
+		mentions = append(mentions, entry)
+	}
+	return mentions
+}
+
 func gatherLearning(ctx context.Context, cfg *config.Config, day time.Time, warnings *warningSink) []JournalLearning {
 	entries := []JournalLearning{}
 
@@ -494,6 +540,19 @@ func printJournalContext(journal JournalContext) {
 		}
 	})
 
+	printJournalSection("slack", len(journal.Slack), func() {
+		for _, mention := range journal.Slack {
+			where := "#" + mention.Channel
+			if mention.Direct {
+				where = "@" + mention.Channel
+			}
+			fmt.Printf("      %s  %s  %s\n",
+				tui.StyleAccent.Render(journalClock(mention.Time)),
+				tui.StyleDim.Render(where),
+				tui.StyleNormal.Render(truncateLine(mention.Text, 60)))
+		}
+	})
+
 	printJournalSection("sessions", len(journal.Worklog), func() {
 		for _, record := range journal.Worklog {
 			roots := []string{}
@@ -525,6 +584,17 @@ func printJournalSection(label string, count int, body func()) {
 	}
 	fmt.Printf("  %s  %s\n", tui.StyleDim.Render(label), tui.StyleMuted.Render(fmt.Sprintf("(%d)", count)))
 	body()
+}
+
+// truncateLine keeps the human listing to one line per item; the JSON output
+// carries the full text.
+func truncateLine(text string, max int) string {
+	text = strings.Join(strings.Fields(text), " ")
+	runes := []rune(text)
+	if len(runes) <= max {
+		return text
+	}
+	return string(runes[:max]) + "…"
 }
 
 func journalClock(timestamp string) string {

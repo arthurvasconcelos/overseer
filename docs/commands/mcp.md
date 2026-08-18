@@ -86,8 +86,8 @@ which overseer
 | `date` | No | Day to gather in `YYYY-MM-DD` form (default today) |
 
 Returns the same payload as [`overseer journal context --format json`](/commands/journal):
-calendar events, commits, merge requests, Jira issues, captured Claude Code sessions,
-learning entries, and the vault path of that day's note. Read-only — it writes nothing,
+calendar events, commits, merge requests, Jira issues, Slack mentions, captured Claude
+Code sessions, learning entries, and the vault path of that day's note. Read-only — it writes nothing,
 so it is safe to call speculatively. Sources that fail contribute to `warnings` rather
 than failing the call.
 

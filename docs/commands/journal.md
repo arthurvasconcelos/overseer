@@ -1,5 +1,5 @@
 ---
-description: Gather a day's calendar, commits, merge requests, Jira issues and Claude Code sessions into one structured payload.
+description: Gather a day's calendar, commits, merge requests, Jira issues, Slack mentions and Claude Code sessions into one structured payload.
 ---
 
 # journal
@@ -23,8 +23,12 @@ overseer journal context --date 2026-08-18 --format json
 | `commits` | git, across managed repos | authored that day by a configured git identity |
 | `mrs` | GitLab / GitHub | merged that day, plus MRs opened that day and still open |
 | `jira` | Jira | issues assigned to you and updated that day |
+| `slack` | Slack | messages that day mentioning you or a watched usergroup |
 | `worklog` | `overseer claude worklog` | Claude Code sessions captured that day |
 | `learning` | learning database | entries added that day |
+
+Slack is the only source that carries what was *agreed with other people* — a
+decision made in a thread leaves no commit and no Jira transition behind.
 
 It also resolves `note_path` — where the day's note lives in the vault — and
 `note_exists`, so the caller knows whether to create or merge.
@@ -34,6 +38,21 @@ It also resolves `note_path` — where the day's note lives in the vault — and
 Every remote source runs concurrently under its own deadline, and a source that
 fails contributes a line to `warnings` instead of failing the command. A stale
 calendar token still leaves you with commits, MRs and sessions.
+
+## Slack mentions
+
+Mentions come from the Search API when the workspace has a `user_token`
+configured, scoped with `on:<date>`; otherwise they come from scanning the
+channels the bot has joined, bounded to the day. Each mention carries its
+channel, author, text, permalink and time.
+
+Direct messages are flagged with `direct: true`. Slack returns the counterpart's
+user ID rather than a name for those, so overseer resolves it through
+`users.info` — which needs the **`users:read`** scope on the token. Without that
+scope the resolution fails quietly and the ID is reported as-is.
+
+Only messages that mention you are gathered. Your own replies are not, so a
+mention is evidence a conversation happened, not a transcript of it.
 
 ## Why merge requests are queried per project
 
