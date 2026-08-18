@@ -35,6 +35,7 @@ function sidebarCommands(): DefaultTheme.SidebarItem[] {
         { text: "setup", link: "/commands/setup" },
         { text: "ssh", link: "/commands/ssh" },
         { text: "standup", link: "/commands/standup" },
+        { text: "journal", link: "/commands/journal" },
         { text: "status", link: "/commands/status" },
         { text: "update", link: "/commands/update" },
         { text: "weekly", link: "/commands/weekly" },

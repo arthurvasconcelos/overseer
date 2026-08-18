@@ -217,6 +217,9 @@ Interactive wizard that creates `~/.config/overseer/config.local.yaml`.
 ### overseer standup
 Synthesize yesterday's activity into a standup message. Pulls Jira issues updated yesterday, GitLab MRs, and GitHub PRs, then uses the configured Claude model to generate a concise standup summary.
 
+### `overseer journal context [--date YYYY-MM-DD]`
+Gather one day's calendar events, commits across managed repos, merged and newly-opened merge requests, Jira issues, captured Claude Code sessions and learning entries into a single structured payload. Read-only — it writes no note and generates no prose; an assistant turns the payload into the Obsidian daily note. Remote sources run concurrently under individual deadlines and degrade into a `warnings` array rather than failing. Merge requests are queried per project (scoped to repos active that day) because the instance-wide GitLab search times out on large accounts.
+
 ```bash
 overseer standup
 overseer standup --post   # post the summary to the configured Slack channel

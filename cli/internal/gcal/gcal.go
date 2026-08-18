@@ -177,8 +177,12 @@ func (c *Client) NextEvent(ctx context.Context) (*Event, error) {
 
 // TodaysEvents returns all events for today across all calendars.
 func (c *Client) TodaysEvents(ctx context.Context) ([]Event, error) {
-	now := time.Now()
-	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	return c.EventsOn(ctx, time.Now())
+}
+
+// EventsOn returns the events on the calendar day containing the given time.
+func (c *Client) EventsOn(ctx context.Context, day time.Time) ([]Event, error) {
+	startOfDay := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, day.Location())
 	endOfDay := startOfDay.Add(24 * time.Hour)
 
 	result, err := c.svc.Events.List("primary").

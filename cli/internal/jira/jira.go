@@ -31,9 +31,9 @@ func New(baseURL, email, token string) *Client {
 
 // Issue is a minimal representation of a Jira issue.
 type Issue struct {
-	Key    string
-	Summary string
-	Status  string
+	Key      string
+	Summary  string
+	Status   string
 	Priority string
 }
 
@@ -41,9 +41,13 @@ type searchResponse struct {
 	Issues []struct {
 		Key    string `json:"key"`
 		Fields struct {
-			Summary  string `json:"summary"`
-			Status   struct{ Name string `json:"name"` } `json:"status"`
-			Priority struct{ Name string `json:"name"` } `json:"priority"`
+			Summary string `json:"summary"`
+			Status  struct {
+				Name string `json:"name"`
+			} `json:"status"`
+			Priority struct {
+				Name string `json:"name"`
+			} `json:"priority"`
 		} `json:"fields"`
 	} `json:"issues"`
 }
@@ -90,7 +94,20 @@ func (c *Client) RecentlyUpdated(ctx context.Context, statuses []string, since t
 		strings.Join(statusList, ", "),
 		sinceStr,
 	)
+	return c.searchJQL(ctx, jql)
+}
 
+// UpdatedBetween returns issues assigned to the current user that were updated
+// within a window, regardless of status. A zero until means "no upper bound".
+func (c *Client) UpdatedBetween(ctx context.Context, since, until time.Time) ([]Issue, error) {
+	jql := fmt.Sprintf(`assignee = currentUser() AND updated >= "%s"`, since.Format("2006/01/02 15:04"))
+	if !until.IsZero() {
+		jql += fmt.Sprintf(` AND updated <= "%s"`, until.Format("2006/01/02 15:04"))
+	}
+	return c.searchJQL(ctx, jql+" ORDER BY updated DESC")
+}
+
+func (c *Client) searchJQL(ctx context.Context, jql string) ([]Issue, error) {
 	body, err := json.Marshal(map[string]any{
 		"jql":        jql,
 		"fields":     []string{"summary", "status", "priority"},
@@ -246,19 +263,31 @@ func (c *Client) GetIssue(ctx context.Context, key string) (*FullIssue, error) {
 	var raw struct {
 		Key    string `json:"key"`
 		Fields struct {
-			Summary   string `json:"summary"`
-			Status    struct{ Name string `json:"name"` } `json:"status"`
-			Priority  struct{ Name string `json:"name"` } `json:"priority"`
-			IssueType struct{ Name string `json:"name"` } `json:"issuetype"`
-			Project   struct {
+			Summary string `json:"summary"`
+			Status  struct {
+				Name string `json:"name"`
+			} `json:"status"`
+			Priority struct {
+				Name string `json:"name"`
+			} `json:"priority"`
+			IssueType struct {
+				Name string `json:"name"`
+			} `json:"issuetype"`
+			Project struct {
 				Key  string `json:"key"`
 				Name string `json:"name"`
 			} `json:"project"`
-			Assignee    *struct{ DisplayName string `json:"displayName"` } `json:"assignee"`
-			Reporter    *struct{ DisplayName string `json:"displayName"` } `json:"reporter"`
-			Description any                                                 `json:"description"`
-			Parent      *struct{ Key string `json:"key"` }                  `json:"parent"`
-			Labels      []string                                             `json:"labels"`
+			Assignee *struct {
+				DisplayName string `json:"displayName"`
+			} `json:"assignee"`
+			Reporter *struct {
+				DisplayName string `json:"displayName"`
+			} `json:"reporter"`
+			Description any `json:"description"`
+			Parent      *struct {
+				Key string `json:"key"`
+			} `json:"parent"`
+			Labels []string `json:"labels"`
 		} `json:"fields"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {

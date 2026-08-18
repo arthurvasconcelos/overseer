@@ -3,6 +3,7 @@ package google
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
@@ -248,3 +249,28 @@ func pluralize(n int, singular, plural string) string {
 	return fmt.Sprintf("%d %s", n, plural)
 }
 
+// EventsOn returns calendar events on a given day across every configured
+// Google account. An account that fails is reported as a warning rather than
+// failing the whole call — a stale token on one account should not lose the
+// events from another.
+func EventsOn(ctx context.Context, cfg *config.Config, day time.Time) ([]gcal.Event, []string) {
+	events := []gcal.Event{}
+	warnings := []string{}
+
+	for _, account := range cfg.Integrations.Google {
+		client, err := buildCalClient(ctx, account)
+		if err != nil {
+			warnings = append(warnings, "gcal/"+account.Name+": "+err.Error())
+			continue
+		}
+		found, err := client.EventsOn(ctx, day)
+		if err != nil {
+			warnings = append(warnings, "gcal/"+account.Name+": "+err.Error())
+			continue
+		}
+		events = append(events, found...)
+	}
+
+	sort.Slice(events, func(i, j int) bool { return events[i].Start.Before(events[j].Start) })
+	return events, warnings
+}

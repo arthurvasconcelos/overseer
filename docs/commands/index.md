@@ -45,6 +45,7 @@ All commands that produce structured data support `--format json`. JSON output a
 | [`setup`](/commands/setup) | Interactive bootstrap wizard |
 | [`ssh`](/commands/ssh) | Manage SSH config profiles |
 | [`standup`](/commands/standup) | Synthesize yesterday's activity into a standup message |
+| [`journal`](/commands/journal) | Gather a day's activity for the daily note |
 | [`status`](/commands/status) | Health-check all integrations |
 | [`update`](/commands/update) | Self-update the binary |
 | [`weekly`](/commands/weekly) | Activity summary for the past 7 days |

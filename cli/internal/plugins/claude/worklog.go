@@ -419,3 +419,9 @@ func plural(count int, noun string) string {
 	}
 	return fmt.Sprintf("%d %ss", count, noun)
 }
+
+// ReadWorklog returns the captured session records for a date. It is the
+// read path other commands use to assemble a day's activity.
+func ReadWorklog(date string) ([]WorklogRecord, error) {
+	return readWorklog(date)
+}

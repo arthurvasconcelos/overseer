@@ -83,6 +83,7 @@ Not everything overseer uses lives in the brain. Some directories are **referenc
 | `overseer brain` | Manage the brain directory (setup, pull, push, status, path) |
 | `overseer daily` | Morning briefing (Jira, Slack, Calendar, PRs) |
 | `overseer standup` | Synthesize yesterday's activity into a standup message |
+| `overseer journal` | Gather a day's activity for the daily note |
 | `overseer weekly` | Activity summary for the past 7 days |
 | `overseer focus` | Timed focus session with optional Jira time logging |
 | `overseer prs` | Open PRs across GitHub and GitLab |

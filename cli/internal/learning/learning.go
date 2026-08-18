@@ -420,6 +420,19 @@ func (s *Service) Due(ctx context.Context) ([]Entry, error) {
 	return scanEntries(ctx, s.db, rows)
 }
 
+// AddedOn returns entries created on the calendar day containing the given time.
+func (s *Service) AddedOn(ctx context.Context, day time.Time) ([]Entry, error) {
+	y, m, d := day.Date()
+	dayStart := time.Date(y, m, d, 0, 0, 0, 0, day.Location())
+	rows, err := s.db.QueryContext(ctx, entrySelectSQL()+` WHERE e.created_at >= ? AND e.created_at <= ? ORDER BY e.created_at ASC, e.id ASC`,
+		formatTime(dayStart.UTC()), formatTime(endOfDay(day)))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanEntries(ctx, s.db, rows)
+}
+
 func (s *Service) Search(ctx context.Context, query string) ([]Entry, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
