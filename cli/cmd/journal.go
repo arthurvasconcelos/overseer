@@ -63,7 +63,7 @@ type JournalContext struct {
 type JournalEvent struct {
 	Title   string `json:"title"`
 	Start   string `json:"start"`
-	End     string `json:"end"`
+	End     string `json:"end,omitempty"`
 	AllDay  bool   `json:"all_day"`
 	JoinURL string `json:"join_url,omitempty"`
 }
@@ -176,13 +176,15 @@ func runJournalContext(_ *cobra.Command, _ []string) error {
 			warnings.add(warning)
 		}
 		for _, event := range events {
-			journal.Calendar = append(journal.Calendar, JournalEvent{
-				Title:   event.Title,
-				Start:   event.Start.Local().Format(time.RFC3339),
-				End:     event.End.Local().Format(time.RFC3339),
-				AllDay:  event.AllDay,
-				JoinURL: event.JoinURL,
-			})
+			// All-day events carry only a date; gcal leaves End zero for them.
+			entry := JournalEvent{Title: strings.TrimSpace(event.Title), AllDay: event.AllDay, JoinURL: event.JoinURL}
+			if event.AllDay {
+				entry.Start = event.Start.Format(journalDateFormat)
+			} else {
+				entry.Start = event.Start.Local().Format(time.RFC3339)
+				entry.End = event.End.Local().Format(time.RFC3339)
+			}
+			journal.Calendar = append(journal.Calendar, entry)
 		}
 	}()
 
