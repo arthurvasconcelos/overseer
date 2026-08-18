@@ -394,17 +394,20 @@ List native plugins and their state: `overseer plugins`
 
 ### External plugins (executables)
 
-Any binary named `overseer-<name>` on PATH or in `brain/overseer/plugins/` is registered as `overseer <name>`. An optional sidecar manifest `overseer-<name>.json` declares description, secrets, and hooks:
+Any binary named `overseer-<name>` on PATH or in `brain/overseer/plugins/` is registered as `overseer <name>`. An optional sidecar manifest `overseer-<name>.json` declares description, secrets, hooks, and MCP tools:
 
 ```json
 {
   "description": "My plugin",
   "secrets": ["github.personal"],
-  "hooks": ["daily", "status"]
+  "hooks": ["daily", "status"],
+  "tools": [{ "name": "history", "description": "List recent deploys", "args": ["history"] }]
 }
 ```
 
 External plugins that declare `"hooks": ["daily"]` are called with the `daily` argument during `overseer daily` (stdout printed as a section). Those that declare `"hooks": ["status"]` are called with `status` and must output a JSON array of `{"name","ok","message"}` items.
+
+Each entry in `tools` becomes an MCP tool named `<plugin>_<name>` on the `overseer mcp` server, answered by running the plugin binary with `args` (defaulting to `[name]`) and returning its stdout. Declared tools take no parameters — use the `run_command` tool for anything needing arguments.
 
 Plugin SDKs are published to PyPI (`pip install overseer-sdk`) and npm (`npm install overseer-sdk`). Source lives in `sdk/python/` and `sdk/typescript/`.
 

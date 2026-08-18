@@ -141,6 +141,12 @@ than failing the call.
 
 Learning tool errors are returned as JSON text with `code`, `message`, and optional `details` fields.
 
+## Plugin-contributed tools
+
+External plugins can add tools of their own by declaring them in their sidecar manifest. They are named `<plugin>_<tool>` and calling one runs that plugin's command, so the list above is not exhaustive on a machine with plugins installed — `overseer plugins` shows what each one contributes.
+
+See [Sidecar manifest](/plugins/#mcp-tools) for how to declare them.
+
 ## Available MCP resources
 
 | Resource | Description |

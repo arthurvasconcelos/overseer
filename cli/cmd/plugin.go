@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
@@ -21,9 +23,24 @@ import (
 // PluginManifest is the optional sidecar JSON file (overseer-<name>.json)
 // that a plugin ships alongside its binary to declare metadata and required secrets.
 type PluginManifest struct {
+	Description string       `json:"description"`
+	Secrets     []string     `json:"secrets"` // e.g. ["github.personal", "gitlab.work"]
+	Hooks       []string     `json:"hooks"`   // e.g. ["daily", "status"]
+	Tools       []PluginTool `json:"tools"`   // MCP tools the plugin contributes
+}
+
+// PluginTool is one MCP tool declared in a plugin manifest. Overseer exposes it
+// as <plugin>_<name> and answers a call by running the plugin binary with Args,
+// so a plugin becomes reachable from an AI assistant without Overseer knowing
+// anything about what it does.
+//
+// Tools take no parameters by design: the manifest is static, and a call has to
+// mean the same thing every time for the declared description to stay honest.
+// Anything that needs arguments stays a shell call through the run_command tool.
+type PluginTool struct {
+	Name        string   `json:"name"`
 	Description string   `json:"description"`
-	Secrets     []string `json:"secrets"` // e.g. ["github.personal", "gitlab.work"]
-	Hooks       []string `json:"hooks"`   // e.g. ["daily", "status"]
+	Args        []string `json:"args"` // argv passed to the binary; defaults to [Name]
 }
 
 // PluginContext is serialized to JSON and injected as OVERSEER_CONTEXT before
@@ -42,8 +59,21 @@ type externalPlugin struct {
 	manifest *PluginManifest
 }
 
+// externalPluginTool pairs a declared tool with the plugin that owns it.
+type externalPluginTool struct {
+	plugin      externalPlugin
+	name        string
+	description string
+	args        []string
+}
+
 // externalRegistry stores all discovered external plugins after registration.
 var externalRegistry []externalPlugin
+
+// pluginToolName is the accepted shape of a declared tool name. It is joined to
+// the plugin name with an underscore, so it stays within what MCP clients accept
+// as a tool identifier.
+var pluginToolName = regexp.MustCompile(`^[a-z0-9][a-z0-9_]*$`)
 
 var pluginsCmd = &cobra.Command{
 	Use:   "plugins",
@@ -90,6 +120,7 @@ func runPluginsList(_ *cobra.Command, _ []string) error {
 	if len(externalRegistry) > 0 {
 		fmt.Println()
 		fmt.Println(tui.SectionHeader("external plugins", ""))
+		allTools := ExternalPluginTools()
 		extMaxLen := 0
 		for _, ep := range externalRegistry {
 			if len(ep.name) > extMaxLen {
@@ -107,6 +138,18 @@ func runPluginsList(_ *cobra.Command, _ []string) error {
 				padding,
 				tui.StyleDim.Render(desc),
 			)
+			var tools []string
+			for _, pt := range allTools {
+				if pt.plugin.name == ep.name {
+					tools = append(tools, ep.name+"_"+pt.name)
+				}
+			}
+			if len(tools) > 0 {
+				fmt.Printf("  %s%s\n",
+					strings.Repeat(" ", extMaxLen+2),
+					tui.StyleMuted.Render("mcp tools: "+strings.Join(tools, ", ")),
+				)
+			}
 		}
 	}
 
@@ -294,6 +337,43 @@ func ExternalPluginsWithHook(hook string) []externalPlugin {
 	return out
 }
 
+// ExternalPluginTools returns every tool declared across registered external
+// plugins, paired with the plugin that declared it. Called by mcp.go.
+//
+// A tool with an unusable or duplicate name is dropped rather than reported: a
+// malformed manifest is the plugin author's problem, and failing here would take
+// down an MCP server the rest of which is fine.
+func ExternalPluginTools() []externalPluginTool {
+	var out []externalPluginTool
+	for _, ep := range externalRegistry {
+		if ep.manifest == nil {
+			continue
+		}
+		seen := map[string]bool{}
+		for _, t := range ep.manifest.Tools {
+			if !pluginToolName.MatchString(t.Name) || seen[t.Name] {
+				continue
+			}
+			seen[t.Name] = true
+			args := t.Args
+			if len(args) == 0 {
+				args = []string{t.Name}
+			}
+			description := t.Description
+			if description == "" {
+				description = fmt.Sprintf("Run: overseer %s %s", ep.name, strings.Join(args, " "))
+			}
+			out = append(out, externalPluginTool{
+				plugin:      ep,
+				name:        t.Name,
+				description: description,
+				args:        args,
+			})
+		}
+	}
+	return out
+}
+
 // loadManifest reads the sidecar JSON manifest for a plugin binary, if present.
 // The manifest is expected at <binPath>.json (e.g. overseer-learning.json).
 func loadManifest(binPath string) *PluginManifest {
@@ -330,18 +410,49 @@ func execPlugin(binPath string, manifest *PluginManifest, args []string) error {
 // runHook calls a plugin binary with a hook argument (e.g. "daily", "status")
 // and returns its captured stdout. OVERSEER_CONTEXT is injected normally.
 func runHook(ep externalPlugin, hook string) (string, error) {
-	ctx, err := buildPluginContext(ep.manifest)
+	return runPluginCapture(context.Background(), ep, hook)
+}
+
+// runPluginCapture runs a plugin binary with args and returns its stdout, with
+// the same OVERSEER_CONTEXT a foreground run would get.
+func runPluginCapture(ctx context.Context, ep externalPlugin, args ...string) (string, error) {
+	return runPluginCaptureEnv(ctx, ep, os.Environ(), args...)
+}
+
+// runPluginCapturePlain is runPluginCapture with terminal styling switched off,
+// for callers whose reader is a machine rather than a terminal.
+func runPluginCapturePlain(ctx context.Context, ep externalPlugin, args ...string) (string, error) {
+	return runPluginCaptureEnv(ctx, ep, plainEnv(os.Environ()), args...)
+}
+
+func runPluginCaptureEnv(ctx context.Context, ep externalPlugin, env []string, args ...string) (string, error) {
+	pluginCtx, err := buildPluginContext(ep.manifest)
 	if err != nil {
 		return "", fmt.Errorf("building plugin context: %w", err)
 	}
-	ctxJSON, err := json.Marshal(ctx)
+	ctxJSON, err := json.Marshal(pluginCtx)
 	if err != nil {
 		return "", fmt.Errorf("serializing plugin context: %w", err)
 	}
-	cmd := exec.Command(ep.binPath, hook)
-	cmd.Env = append(os.Environ(), "OVERSEER_CONTEXT="+string(ctxJSON))
+	cmd := exec.CommandContext(ctx, ep.binPath, args...)
+	cmd.Env = append(env, "OVERSEER_CONTEXT="+string(ctxJSON))
 	out, err := cmd.Output()
 	return string(out), err
+}
+
+// plainEnv sets NO_COLOR and drops the force-colour overrides that would beat
+// it, so a plugin honouring either convention prints unstyled text. Writing to a
+// pipe is not enough on its own: FORCE_COLOR is set by some parent processes,
+// and a plugin that reads it will colour its output regardless.
+func plainEnv(env []string) []string {
+	out := make([]string, 0, len(env)+1)
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "FORCE_COLOR=") || strings.HasPrefix(kv, "CLICOLOR_FORCE=") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return append(out, "NO_COLOR=1")
 }
 
 // buildPluginContext constructs the PluginContext for a plugin, resolving any

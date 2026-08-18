@@ -43,7 +43,14 @@ Place `overseer-<name>.json` alongside the binary to declare metadata:
 {
   "description": "Deploy to production",
   "secrets": ["github.personal", "gitlab.work"],
-  "hooks": ["daily", "status"]
+  "hooks": ["daily", "status"],
+  "tools": [
+    {
+      "name": "history",
+      "description": "List the last 20 production deploys with their status",
+      "args": ["history", "--limit", "20"]
+    }
+  ]
 }
 ```
 
@@ -52,6 +59,7 @@ Place `overseer-<name>.json` alongside the binary to declare metadata:
 | `description` | Shown in `overseer --help` and `overseer plugins` |
 | `secrets` | Integration references whose tokens overseer resolves and injects via `OVERSEER_CONTEXT` |
 | `hooks` | Extension points to participate in: `"daily"` and/or `"status"` |
+| `tools` | MCP tools the plugin contributes to `overseer mcp` |
 
 #### `daily` hook
 
@@ -66,6 +74,36 @@ When `hooks` includes `"status"`, overseer calls `overseer-<name> status` during
 ```
 
 Each item is displayed as a status row alongside built-in checks.
+
+### MCP tools
+
+Everything a plugin declares in `tools` is registered as a tool on the [`overseer mcp`](/commands/mcp) server, so an AI assistant can call it the same way it calls a built-in one.
+
+| Field | Required | Description |
+|---|---|---|
+| `name` | Yes | Lowercase letters, digits, and underscores. Exposed as `<plugin>_<name>` |
+| `description` | No | What the assistant sees. Defaults to the command line being run |
+| `args` | No | Argv passed to the plugin binary. Defaults to `[name]` |
+
+Give `args` explicitly whenever the tool name is not the command:
+
+```json
+{ "name": "wt_list", "description": "List all worktrees", "args": ["wt", "list"] }
+```
+
+A declared tool takes no parameters. The manifest is static, so a call has to mean the same thing every time for its description to stay honest — anything that needs arguments is better left to the `run_command` tool, which runs an arbitrary shell command. That makes `tools` the right place for read-only commands worth calling unprompted: status summaries, listings, health checks.
+
+The plugin is run exactly as it is from the terminal, with `OVERSEER_CONTEXT` injected, and whatever it prints to stdout becomes the tool result. Since stdout is a pipe rather than a terminal, colouring should switch itself off — most CLI libraries handle that on their own. On a non-zero exit, stderr is returned to the assistant as the error.
+
+Check what a plugin currently contributes with `overseer plugins`:
+
+```
+▸ external plugins
+  p24  Platform24 repo index — clone, sync, and manage P24 GitLab repos
+       mcp tools: p24_repos, p24_unpushed, p24_check, p24_wt_list
+```
+
+Tools are read from the manifest when the MCP server starts, so an assistant already holding a session needs to reconnect before an edited manifest takes effect.
 
 ## Listing plugins
 

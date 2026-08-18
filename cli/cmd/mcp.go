@@ -41,7 +41,9 @@ func init() {
 
 const mcpServerInstructions = `overseer is a personal local assistant server for development context, repository status, notes, command execution, and structured learning.
 
-For learning workflows, prefer the dedicated learning tools over shell commands. Use learning_status, learning_due, learning_search, and learning_get for read-heavy context before mutating data. Use learning_add only when the user wants to capture a durable learning entry. Use learning_review only after a review rating is known or explicitly provided.`
+For learning workflows, prefer the dedicated learning tools over shell commands. Use learning_status, learning_due, learning_search, and learning_get for read-heavy context before mutating data. Use learning_add only when the user wants to capture a durable learning entry. Use learning_review only after a review rating is known or explicitly provided.
+
+Tools named <plugin>_<tool> are contributed by external plugins and run that plugin's own command. Their output is whatever the plugin prints, so read it as text unless the description says otherwise.`
 
 func runMCP(_ *cobra.Command, _ []string) error {
 	self, err := os.Executable()
@@ -242,6 +244,8 @@ func runMCP(_ *cobra.Command, _ []string) error {
 		mcpLearningArchive,
 	)
 
+	registerPluginTools(s)
+
 	s.AddResource(
 		mcp.NewResource("overseer://learning/status", "Learning Status",
 			mcp.WithResourceDescription("Current learning counts and upcoming schedule as JSON"),
@@ -328,6 +332,45 @@ func mcpListCommands(_ context.Context) (*mcp.CallToolResult, error) {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	return mcp.NewToolResultText(string(b)), nil
+}
+
+// registerPluginTools exposes the tools external plugins declare in their
+// manifests. Each is named <plugin>_<tool> and answered by running the plugin
+// binary, which is what lets a plugin reach an AI assistant without overseer
+// carrying any knowledge of it.
+func registerPluginTools(s *server.MCPServer) {
+	for _, pt := range ExternalPluginTools() {
+		s.AddTool(
+			mcp.NewTool(pt.plugin.name+"_"+pt.name, mcp.WithDescription(pt.description)),
+			func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				// plainEnv asks for unstyled output; stripANSI is the fallback
+				// for a plugin that colours regardless. What reaches the client
+				// is read by a model, which pays tokens for every escape code.
+				out, err := runPluginCapturePlain(ctx, pt.plugin, pt.args...)
+				out = strings.TrimSpace(stripANSI(out))
+				if err != nil {
+					return mcp.NewToolResultError(stripANSI(pluginToolError(out, err))), nil
+				}
+				return mcp.NewToolResultText(out), nil
+			},
+		)
+	}
+}
+
+// pluginToolError picks the most useful of the three things a failed plugin run
+// can leave behind: what it wrote to stderr, what it wrote to stdout, or nothing
+// but the exit status.
+func pluginToolError(stdout string, err error) string {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		if msg := strings.TrimSpace(string(exitErr.Stderr)); msg != "" {
+			return msg
+		}
+	}
+	if stdout != "" {
+		return stdout
+	}
+	return err.Error()
 }
 
 func mcpLearningAdd(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
