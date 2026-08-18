@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -279,6 +281,72 @@ func TestLearnEditClearsSourceAndRejectsBadID(t *testing.T) {
 	}
 }
 
+func TestLearnReviewAllJSON(t *testing.T) {
+	brain := t.TempDir()
+	t.Setenv("OVERSEER_BRAIN", brain)
+	output.Format = "json"
+	t.Cleanup(func() {
+		output.Format = "text"
+		learnAddOpts.description = ""
+		learnAddOpts.questions = nil
+		learnReviewOpts.all = false
+		learnReviewOpts.rating = ""
+		learnReviewOpts.notes = ""
+	})
+
+	learnAddOpts.description = "desc"
+	learnAddOpts.questions = []string{"Q?"}
+	for _, topic := range []string{"Alpha", "Beta", "Gamma"} {
+		if _, err := captureStdout(func() error {
+			return runLearnAdd(&cobra.Command{}, []string{topic})
+		}); err != nil {
+			t.Fatalf("learn add %s: %v", topic, err)
+		}
+	}
+	forceLearningDue(t, brain)
+
+	learnReviewOpts.all = true
+	learnReviewOpts.rating = learning.RatingGood
+	learnReviewOpts.notes = "batch pass"
+	out, err := captureStdout(func() error {
+		return runLearnReview(&cobra.Command{}, nil)
+	})
+	if err != nil {
+		t.Fatalf("learn review --all: %v", err)
+	}
+	var reviews []learning.Review
+	if err := json.Unmarshal([]byte(out), &reviews); err != nil {
+		t.Fatalf("unmarshal reviews: %v", err)
+	}
+	if len(reviews) != 3 {
+		t.Fatalf("reviewed %d entries, want 3", len(reviews))
+	}
+	seen := map[int64]bool{}
+	for _, r := range reviews {
+		if r.Rating != learning.RatingGood || r.Notes != "batch pass" {
+			t.Fatalf("review %#v", r)
+		}
+		seen[r.EntryID] = true
+	}
+	if len(seen) != 3 {
+		t.Fatalf("distinct entries reviewed = %d, want 3", len(seen))
+	}
+
+	out, err = captureStdout(func() error {
+		return runLearnReview(&cobra.Command{}, nil)
+	})
+	if err != nil {
+		t.Fatalf("second learn review --all: %v", err)
+	}
+	var empty []learning.Review
+	if err := json.Unmarshal([]byte(out), &empty); err != nil {
+		t.Fatalf("unmarshal empty reviews: %v", err)
+	}
+	if len(empty) != 0 {
+		t.Fatalf("expected nothing due, got %d", len(empty))
+	}
+}
+
 func newLearnEditTestCmd() *cobra.Command {
 	learnEditOpts.topic = ""
 	learnEditOpts.source = ""
@@ -301,5 +369,17 @@ func mustSetFlag(t *testing.T, cmd *cobra.Command, name, value string) {
 	t.Helper()
 	if err := cmd.Flags().Set(name, value); err != nil {
 		t.Fatalf("set --%s: %v", name, err)
+	}
+}
+
+func forceLearningDue(t *testing.T, brain string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", filepath.Join(brain, "overseer", "learning.db"))
+	if err != nil {
+		t.Fatalf("open learning db: %v", err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`UPDATE learning_entries SET next_due_at = '2020-01-01T00:00:00Z'`); err != nil {
+		t.Fatalf("force due: %v", err)
 	}
 }

@@ -35,6 +35,7 @@ var learnReviewOpts struct {
 	entryID int64
 	rating  string
 	notes   string
+	all     bool
 }
 
 var learnCmd = &cobra.Command{
@@ -113,6 +114,7 @@ func init() {
 	learnReviewCmd.Flags().Int64Var(&learnReviewOpts.entryID, "entry-id", 0, "Entry ID to review")
 	learnReviewCmd.Flags().StringVar(&learnReviewOpts.rating, "rating", "", "Review rating: missed, hard, good, easy")
 	learnReviewCmd.Flags().StringVar(&learnReviewOpts.notes, "notes", "", "Optional review notes")
+	learnReviewCmd.Flags().BoolVar(&learnReviewOpts.all, "all", false, "Review every due entry in one session")
 	learnCmd.AddCommand(learnAddCmd)
 	learnCmd.AddCommand(learnDueCmd)
 	learnCmd.AddCommand(learnReviewCmd)
@@ -239,6 +241,10 @@ func runLearnDue(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
+const learnReviewSkipChoice = "skip"
+
+var errLearnReviewCancelled = errors.New("learning review cancelled")
+
 func runLearnReview(cmd *cobra.Command, _ []string) error {
 	ctx := commandContext(cmd)
 	svc, err := learningService(ctx)
@@ -247,9 +253,16 @@ func runLearnReview(cmd *cobra.Command, _ []string) error {
 	}
 	defer svc.Close()
 
+	if learnReviewOpts.all {
+		return runLearnReviewAll(ctx, svc)
+	}
+
 	var entry learning.Entry
 	if learnReviewOpts.entryID > 0 {
 		entry, err = svc.Get(ctx, learnReviewOpts.entryID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("learning entry not found: %d", learnReviewOpts.entryID)
+		}
 		if err != nil {
 			return err
 		}
@@ -276,14 +289,89 @@ func runLearnReview(cmd *cobra.Command, _ []string) error {
 		entry = due[idx]
 	}
 
-	interactiveReview := learnReviewOpts.rating == ""
-	if interactiveReview {
+	review, err := reviewLearningEntry(ctx, svc, entry, learnReviewOpts.rating, learnReviewOpts.notes, false)
+	if errors.Is(err, errLearnReviewCancelled) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if review == nil {
+		return nil
+	}
+	if output.Format == "json" {
+		return output.PrintJSON(review)
+	}
+	printLearningReviewResult(entry, *review)
+	return nil
+}
+
+func runLearnReviewAll(ctx context.Context, svc *learning.Service) error {
+	due, err := svc.Due(ctx)
+	if err != nil {
+		return err
+	}
+	if len(due) == 0 {
+		if output.Format == "json" {
+			return output.PrintJSON([]learning.Review{})
+		}
+		fmt.Println(tui.StyleMuted.Render("no learning reviews due"))
+		return nil
+	}
+
+	if output.Format != "json" {
+		fmt.Println(tui.SectionHeader("learning review", fmt.Sprintf("%d due", len(due))))
+	}
+
+	reviews := make([]learning.Review, 0, len(due))
+	skipped := 0
+	for i, entry := range due {
+		if output.Format != "json" {
+			fmt.Printf("\n%s\n", tui.StyleMuted.Render(fmt.Sprintf("[%d/%d]", i+1, len(due))))
+		}
+		review, err := reviewLearningEntry(ctx, svc, entry, learnReviewOpts.rating, learnReviewOpts.notes, true)
+		if errors.Is(err, errLearnReviewCancelled) {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if review == nil {
+			skipped++
+			continue
+		}
+		reviews = append(reviews, *review)
+		if output.Format != "json" {
+			printLearningReviewResult(entry, *review)
+		}
+	}
+
+	if output.Format == "json" {
+		return output.PrintJSON(reviews)
+	}
+	fmt.Println()
+	summary := fmt.Sprintf("reviewed %d of %d", len(reviews), len(due))
+	if skipped > 0 {
+		summary += fmt.Sprintf(", skipped %d", skipped)
+	}
+	if remaining := len(due) - len(reviews) - skipped; remaining > 0 {
+		summary += fmt.Sprintf(", %d left due", remaining)
+	}
+	fmt.Println(tui.StyleOK.Render("✓") + "  " + summary)
+	return nil
+}
+
+func reviewLearningEntry(ctx context.Context, svc *learning.Service, entry learning.Entry, rating, notes string, allowSkip bool) (*learning.Review, error) {
+	if rating == "" {
 		fmt.Println(tui.SectionHeader("learning review", entry.Topic))
+		if err := printLearningCorrectionNotice(ctx, svc, entry); err != nil {
+			return nil, err
+		}
 		fmt.Println(entry.Description)
 		fmt.Println()
 		for _, q := range entry.Questions {
 			if _, err := tui.Prompt(q.Question, "", "answer privately, then press enter"); err != nil {
-				return err
+				return nil, err
 			}
 		}
 		items := []tui.SelectItem{
@@ -292,31 +380,57 @@ func runLearnReview(cmd *cobra.Command, _ []string) error {
 			{Title: learning.RatingEasy, Subtitle: "too easy"},
 			{Title: learning.RatingMissed, Subtitle: "missed"},
 		}
+		if allowSkip {
+			items = append(items, tui.SelectItem{Title: learnReviewSkipChoice, Subtitle: "leave this entry due"})
+		}
 		idx, err := tui.Select("rating", items)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if idx < 0 {
-			return nil
+			return nil, errLearnReviewCancelled
 		}
-		learnReviewOpts.rating = items[idx].Title
-	}
-	if interactiveReview && learnReviewOpts.notes == "" {
-		learnReviewOpts.notes, err = tui.Prompt("review notes (optional)", "", "")
-		if err != nil {
-			return err
+		if items[idx].Title == learnReviewSkipChoice {
+			return nil, nil
+		}
+		rating = items[idx].Title
+		if notes == "" {
+			notes, err = tui.Prompt("review notes (optional)", "", "")
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
-	review, err := svc.Review(ctx, entry.ID, learnReviewOpts.rating, learnReviewOpts.notes)
+	review, err := svc.Review(ctx, entry.ID, rating, notes)
+	if err != nil {
+		return nil, err
+	}
+	return &review, nil
+}
+
+func printLearningCorrectionNotice(ctx context.Context, svc *learning.Service, entry learning.Entry) error {
+	if entry.CorrectedAt == nil {
+		return nil
+	}
+	reviews, err := svc.Reviews(ctx, entry.ID)
 	if err != nil {
 		return err
 	}
-	if output.Format == "json" {
-		return output.PrintJSON(review)
+	if len(reviews) > 0 && !entry.CorrectedAt.After(reviews[0].ReviewedAt) {
+		return nil
 	}
+	notice := fmt.Sprintf("corrected %s since you last saw this", entry.CorrectedAt.Local().Format("2006-01-02"))
+	if entry.RevisionNote != "" {
+		notice += ": " + entry.RevisionNote
+	}
+	fmt.Println(tui.StyleWarn.Render(notice))
+	fmt.Println()
+	return nil
+}
+
+func printLearningReviewResult(entry learning.Entry, review learning.Review) {
 	fmt.Printf("%s  reviewed #%d: %s\n", tui.StyleOK.Render("✓"), entry.ID, tui.StyleAccent.Render(entry.Topic))
 	fmt.Printf("   next review: %s (%d day interval)\n", review.NextDueAt.Local().Format("2006-01-02"), review.IntervalDays)
-	return nil
 }
 
 func runLearnStatus(cmd *cobra.Command, _ []string) error {

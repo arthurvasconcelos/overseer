@@ -13,6 +13,7 @@ Capture and review structured learning entries stored in the brain at `overseer/
 | `overseer learn add [topic]` | Add a learning entry. Prompts for missing topic, source, description, and quiz questions. |
 | `overseer learn due` | Show entries due today or earlier. |
 | `overseer learn review` | Run an interactive review for due entries, or review a specific item with flags. |
+| `overseer learn review --all` | Walk every due entry in one session. |
 | `overseer learn status` | Show active entry count, due count, upcoming reviews, and recent review count. |
 | `overseer learn search <query>` | Search topics, sources, descriptions, and quiz questions. |
 | `overseer learn show <entry-id>` | Show one learning entry with quiz questions, schedule, review summary, and review history. |
@@ -63,6 +64,13 @@ off to `$EDITOR`.
 Each edit stamps `corrected_at` and stores the `--note` as a revision note. When an entry has been
 corrected since you last reviewed it, the next review leads with that note, so a correction is
 itself surfaced rather than silently swapped in.
+
+## Batch review
+
+`overseer learn review --all` walks every due entry in one pass, prompting for a rating and notes
+per entry. Each entry also offers `skip` to leave it due, and cancelling ends the session early
+while keeping the reviews already recorded. The run closes with a count of what was reviewed,
+skipped, and left due.
 
 ## Future extensions
 
