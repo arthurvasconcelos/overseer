@@ -142,6 +142,45 @@ prints an informative message and exits cleanly.
 The install command writes the full binary path so Claude Code can find it
 regardless of the PATH environment it inherits.
 
+## `overseer claude worklog`
+
+Capture what happened in each Claude Code session, so the day can be reconstructed
+later without re-reading transcripts. A single day routinely produces millions of
+tokens of transcript across several sessions — far too much to summarise in one pass.
+
+```bash
+overseer claude worklog install     # register the SessionEnd hook
+overseer claude worklog show        # today's captured sessions
+overseer claude worklog show --date 2026-08-18 --format json
+overseer claude worklog uninstall   # remove the hook
+```
+
+`install` writes `<brain>/claude/hooks/session-end-worklog.sh`, symlinks it into
+`~/.claude/hooks/`, and registers a `SessionEnd` hook in `<brain>/claude/settings.json`.
+Only the `hooks` key is rewritten — every other setting keeps its original order and
+formatting. Both commands are idempotent, and `uninstall` restores the file exactly.
+
+### What a record holds
+
+One record per session **per date** — a session that resumes the next day produces two.
+Records are written to `~/.local/share/overseer/worklog/YYYY-MM-DD.jsonl`, which is
+machine-local and deliberately not brain-synced: the brain carries the hook, the machine
+keeps the data.
+
+| Field | Notes |
+|---|---|
+| `started_at` / `ended_at` | From record timestamps, never file mtime — sessions resume across days |
+| `workdirs` | Every distinct `cwd` resolved to its git root and deduped; one session often spans several repos |
+| `prompts` | Human prompts only — gated on `promptSource`, minus IDE notifications, slash-command echoes and hook output |
+| `files` | From Claude Code's file history. **Partial by design**: edits made through Bash never appear, so treat git as authoritative |
+
+Commits are deliberately *not* recorded here. Work frequently lands in repos that were
+never a session `cwd`, so commits are gathered day-wide elsewhere rather than attributed
+per session.
+
+The hook never fails a session: a malformed payload or unreadable transcript prints to
+stderr and exits 0.
+
 ## Config
 
 External skill search paths are stored in the brain config under `integrations.claude.skill_search_paths`:

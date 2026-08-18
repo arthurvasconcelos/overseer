@@ -383,6 +383,8 @@ Integration plugins (`jira`, `slack`, `google`, `github`, `gitlab`) also registe
 
 The `claude` plugin manages symlinks between `<brain>/claude/` and `~/.claude/` (settings, CLAUDE.md, plans, memory, hooks, skills). Run `overseer claude setup` for an interactive wizard.
 
+It also provides `overseer claude worklog`, which captures one record per Claude Code session (prompts, git roots, touched files) via a `SessionEnd` hook. Records land in `~/.local/share/overseer/worklog/YYYY-MM-DD.jsonl` — machine-local, not brain-synced. Install with `overseer claude worklog install`, read back with `overseer claude worklog show --date <date> --format json`.
+
 The `codex` plugin manages symlinks between `<brain>/codex/` and `~/.codex/` (config.toml, AGENTS.md, plans, memories, hooks, skills). Run `overseer codex setup` for an interactive wizard.
 
 List native plugins and their state: `overseer plugins`
