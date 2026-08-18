@@ -157,6 +157,22 @@ func runMCP(_ *cobra.Command, _ []string) error {
 	)
 
 	s.AddTool(
+		mcp.NewTool("run_journal_context",
+			mcp.WithDescription("Gather one day's calendar events, commits, merge requests, Jira issues, captured Claude Code sessions and learning entries, plus the vault path of that day's daily note. Read-only — writes nothing. Sources that fail are reported in the warnings array rather than failing the call."),
+			mcp.WithString("date",
+				mcp.Description("Day to gather in YYYY-MM-DD form (default today)"),
+			),
+		),
+		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := []string{"journal", "context", "--format", "json"}
+			if date, _ := req.GetArguments()["date"].(string); date != "" {
+				args = append(args, "--date", date)
+			}
+			return mcpExec(ctx, self, args...)
+		},
+	)
+
+	s.AddTool(
 		mcp.NewTool("learning_add",
 			mcp.WithDescription("Add a structured learning entry"),
 			mcp.WithString("topic", mcp.Required(), mcp.Description("Learning topic")),

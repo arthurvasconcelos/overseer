@@ -289,7 +289,7 @@ Start an MCP (Model Context Protocol) server over stdio. Agent-agnostic — work
 overseer mcp
 ```
 
-MCP tools exposed: `list_commands`, `run_prs`, `run_repos_status`, `get_config`, `run_note_search`, `run_command`, `learning_add`, `learning_draft`, `learning_due`, `learning_search`, `learning_get`, `learning_status`, `learning_review`, `learning_archive`.
+MCP tools exposed: `list_commands`, `run_prs`, `run_repos_status`, `get_config`, `run_note_search`, `run_journal_context`, `run_command`, `learning_add`, `learning_draft`, `learning_due`, `learning_search`, `learning_get`, `learning_status`, `learning_review`, `learning_archive`.
 MCP learning resources exposed: `overseer://learning/status`, `overseer://learning/due`, `overseer://learning/entries/{entry_id}`.
 MCP learning prompts exposed: `learning_review_session`.
 

@@ -60,6 +60,7 @@ which overseer
 | `get_config` | Return the active config as JSON |
 | `run_command` | Run a shell command with secrets injected |
 | `run_note_search` | Search the Obsidian vault |
+| `run_journal_context` | Gather one day's activity for the daily note |
 | `learning_add` | Add a structured learning entry |
 | `learning_draft` | Validate and preview a learning entry without saving it |
 | `learning_due` | Return learning entries due for review |
@@ -77,6 +78,18 @@ which overseer
 | `gitlab` | No | GitLab instance name — injects `GITLAB_TOKEN` and `GITLAB_HOST` |
 | `github` | No | GitHub instance name — injects `GITHUB_TOKEN` |
 | `env` | No | 1Password environment name — injects its secrets as env vars |
+
+### `run_journal_context` parameters
+
+| Parameter | Required | Description |
+|---|---|---|
+| `date` | No | Day to gather in `YYYY-MM-DD` form (default today) |
+
+Returns the same payload as [`overseer journal context --format json`](/commands/journal):
+calendar events, commits, merge requests, Jira issues, captured Claude Code sessions,
+learning entries, and the vault path of that day's note. Read-only — it writes nothing,
+so it is safe to call speculatively. Sources that fail contribute to `warnings` rather
+than failing the call.
 
 ### Learning tool parameters
 
