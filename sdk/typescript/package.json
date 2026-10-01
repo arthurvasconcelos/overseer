@@ -2,6 +2,13 @@
   "name": "overseer-sdk",
   "version": "0.1.2",
   "description": "TypeScript SDK for building Overseer plugins",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arthurvasconcelos/overseer.git",
+    "directory": "sdk/typescript"
+  },
+  "homepage": "https://github.com/arthurvasconcelos/overseer/tree/main/sdk/typescript#readme",
+  "bugs": "https://github.com/arthurvasconcelos/overseer/issues",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
