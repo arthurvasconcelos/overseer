@@ -499,11 +499,49 @@ func runBrainPush(_ *cobra.Command, _ []string) error {
 	}
 
 	porcelain := brainGitOutput(brainPath, "status", "--porcelain")
-	if porcelain == "" {
-		fmt.Printf("%s  nothing to commit, brain is clean\n", tui.StyleOK.Render("✓"))
+	upstream := brainGitOutput(brainPath, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+	if porcelain == "" && !brainHasUnpushed(brainPath, upstream) {
+		fmt.Printf("%s  nothing to push, brain is up to date\n", tui.StyleOK.Render("✓"))
 		return nil
 	}
 
+	remote := cfg.Brain.URL
+	if remote == "" {
+		remote = brainGitOutput(brainPath, "remote", "get-url", "origin")
+	}
+	fmt.Println(tui.SectionHeader("brain push", remote))
+	fmt.Println()
+
+	if porcelain != "" {
+		if err := commitBrain(brainPath, cfg, porcelain); err != nil {
+			return err
+		}
+	}
+
+	pushArgs := []string{"-C", brainPath, "push"}
+	if upstream == "" {
+		if brainGitOutput(brainPath, "remote", "get-url", "origin") == "" {
+			if cfg.Brain.URL == "" {
+				return fmt.Errorf("brain has no origin remote — set brain.url in config.yaml or run: git -C %s remote add origin <url>", brainPath)
+			}
+			if out, err := gitIn(brainPath, "remote", "add", "origin", cfg.Brain.URL); err != nil {
+				return fmt.Errorf("git remote add: %s", strings.TrimSpace(out))
+			}
+		}
+		pushArgs = append(pushArgs, "--set-upstream", "origin", "HEAD")
+	}
+
+	cmd := exec.Command("git", pushArgs...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git push failed: %w", err)
+	}
+
+	return nil
+}
+
+func commitBrain(brainPath string, cfg *config.Config, porcelain string) error {
 	// Parse affected file names from porcelain output.
 	lines := strings.Split(strings.TrimSpace(porcelain), "\n")
 	files := make([]string, 0, len(lines))
@@ -526,13 +564,6 @@ func runBrainPush(_ *cobra.Command, _ []string) error {
 	msg := fmt.Sprintf("%d brain files from %s on %s\nAffected files:\n%s",
 		len(files), hostname, date, strings.Join(files, "\n"))
 
-	remote := cfg.Brain.URL
-	if remote == "" {
-		remote = brainGitOutput(brainPath, "remote", "get-url", "origin")
-	}
-	fmt.Println(tui.SectionHeader("brain push", remote))
-	fmt.Println()
-
 	if out, err := gitIn(brainPath, "add", "-A"); err != nil {
 		return fmt.Errorf("git add: %s", strings.TrimSpace(out))
 	}
@@ -542,15 +573,19 @@ func runBrainPush(_ *cobra.Command, _ []string) error {
 	}
 	fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render(strings.SplitN(msg, "\n", 2)[0]))
 	fmt.Println()
-
-	cmd := exec.Command("git", "-C", brainPath, "push")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git push failed: %w", err)
-	}
-
 	return nil
+}
+
+// brainHasUnpushed reports whether the brain has local commits that the
+// upstream lacks. With no upstream, any commit counts as unpushed.
+func brainHasUnpushed(brainPath, upstream string) bool {
+	if brainGitOutput(brainPath, "rev-parse", "--verify", "HEAD") == "" {
+		return false
+	}
+	if upstream == "" {
+		return true
+	}
+	return brainGitOutput(brainPath, "rev-list", "--count", upstream+"..HEAD") != "0"
 }
 
 // --- brain path ---
