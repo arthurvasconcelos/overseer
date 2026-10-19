@@ -39,7 +39,7 @@ homebrew_casks:
       owner: arthurvasconcelos
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
+    directory: Casks
     homepage: "https://github.com/arthurvasconcelos/overseer"
     description: "Personal CLI for environment setup and daily automation"
     binaries:
@@ -59,7 +59,7 @@ homebrew_casks:
       owner: arthurvasconcelos
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
+    directory: Casks
     homepage: "https://github.com/arthurvasconcelos/overseer"
     description: "Personal CLI for environment setup and daily automation (beta channel)"
     binaries:
