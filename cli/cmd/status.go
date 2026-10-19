@@ -12,6 +12,7 @@ import (
 	"github.com/arthurvasconcelos/overseer/internal/output"
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/nativeplugin"
+	"github.com/arthurvasconcelos/overseer/internal/secrets"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -130,7 +131,7 @@ func runStatus(_ *cobra.Command, _ []string) error {
 }
 
 func checkOnePassword() checkResult {
-	out, err := exec.Command("op", "account", "list", "--format=json").Output()
+	out, err := exec.Command(secrets.Binary(), "account", "list", "--format=json").Output()
 	if err != nil {
 		return checkResult{ok: false, msg: "op CLI not available or not signed in"}
 	}

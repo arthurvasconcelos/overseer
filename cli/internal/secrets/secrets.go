@@ -5,7 +5,28 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 )
+
+// Binary returns the 1Password CLI executable to invoke. Under WSL the
+// desktop app integration only works through the Windows op.exe, which users
+// usually reach via a shell alias that exec.Command never sees.
+var Binary = sync.OnceValue(func() string {
+	if isWSL() {
+		if path, err := exec.LookPath("op.exe"); err == nil {
+			return path
+		}
+	}
+	return "op"
+})
+
+func isWSL() bool {
+	if os.Getenv("WSL_DISTRO_NAME") != "" {
+		return true
+	}
+	data, err := os.ReadFile("/proc/sys/kernel/osrelease")
+	return err == nil && strings.Contains(strings.ToLower(string(data)), "microsoft")
+}
 
 // Read retrieves a secret from 1Password using a full op:// reference.
 // It shells out to: op read "op://vault/item/field"
@@ -21,7 +42,7 @@ func ReadAs(ref, account string) (string, error) {
 	if account != "" {
 		args = append(args, "--account", account)
 	}
-	out, err := exec.Command("op", args...).Output()
+	out, err := exec.Command(Binary(), args...).Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return "", fmt.Errorf("op read %s: %s", ref, strings.TrimSpace(string(exitErr.Stderr)))
@@ -47,7 +68,7 @@ func Get(vault, item, field string) (string, error) {
 func RunWithEnv(envID string, args ...string) error {
 	opArgs := []string{"run", "--environment", envID, "--no-masking", "--"}
 	opArgs = append(opArgs, args...)
-	cmd := exec.Command("op", opArgs...)
+	cmd := exec.Command(Binary(), opArgs...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 
 	"github.com/arthurvasconcelos/overseer/internal/output"
+	"github.com/arthurvasconcelos/overseer/internal/secrets"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -37,7 +38,7 @@ type opAccount struct {
 }
 
 func runAccounts(_ *cobra.Command, _ []string) error {
-	out, err := exec.Command("op", "account", "list", "--format=json").Output()
+	out, err := exec.Command(secrets.Binary(), "account", "list", "--format=json").Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return fmt.Errorf("op account list: %s", exitErr.Stderr)
