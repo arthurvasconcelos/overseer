@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -22,19 +23,32 @@ func ReadConfigNode(path string) (*yaml.Node, error) {
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
-	if len(doc.Content) == 0 {
-		doc.Content = []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}
+	if doc.Kind == 0 || len(doc.Content) == 0 {
+		return emptyDoc(), nil
 	}
 	return &doc, nil
 }
 
-// WriteConfigNode marshals a yaml.Node document and writes it to path.
+// WriteConfigNode marshals a yaml.Node document and writes it to path. When the
+// file on disk holds only comments (such as the scaffolded template), the new
+// content is appended so those comments survive.
 func WriteConfigNode(path string, doc *yaml.Node) error {
 	data, err := yaml.Marshal(doc)
 	if err != nil {
 		return err
 	}
+	if existing, readErr := os.ReadFile(path); readErr == nil && isCommentOnly(existing) {
+		data = append([]byte(strings.TrimRight(string(existing), "\n")+"\n\n"), data...)
+	}
 	return os.WriteFile(path, data, 0644)
+}
+
+func isCommentOnly(data []byte) bool {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return false
+	}
+	return len(doc.Content) == 0
 }
 
 // GetProfiles decodes all GitProfile entries from the document.

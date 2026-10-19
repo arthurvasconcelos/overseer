@@ -96,6 +96,8 @@ func runSetup(_ *cobra.Command, _ []string) error {
 	fmt.Println(tui.SectionHeader("git", "identity profiles"))
 	fmt.Println()
 
+	var gitDefaults *config.GitDefaults
+	var initialProfile *config.GitProfile
 	if len(existing.Git.Profiles) > 0 {
 		fmt.Printf("  %s  %s\n", tui.StyleDim.Render("[skip]"), tui.StyleMuted.Render(fmt.Sprintf("%d profile(s) already configured", len(existing.Git.Profiles))))
 		fmt.Println()
@@ -106,12 +108,13 @@ func runSetup(_ *cobra.Command, _ []string) error {
 		}
 		fmt.Println()
 
-		var gitDefaults config.GitDefaults
+		var defaults config.GitDefaults
 		if wantsDefaults {
-			gitDefaults, err = promptDefaults(existing.Git.Defaults)
+			defaults, err = promptDefaults(existing.Git.Defaults)
 			if err != nil {
 				return err
 			}
+			gitDefaults = &defaults
 		}
 
 		wantsProfile, err := tui.Confirm("create an initial git profile?")
@@ -120,43 +123,12 @@ func runSetup(_ *cobra.Command, _ []string) error {
 		}
 		fmt.Println()
 
-		var initialProfile *config.GitProfile
 		if wantsProfile {
-			p, err := promptProfile(config.GitProfile{}, gitDefaults)
+			p, err := promptProfile(config.GitProfile{}, defaults)
 			if err != nil {
 				return err
 			}
 			initialProfile = &p
-		}
-
-		// Write defaults and profile into brain config now so later wizard
-		// steps (e.g. brain git-init) can reference them.
-		if wantsDefaults || initialProfile != nil {
-			brainOverseerDir := config.BrainOverseerPath(existing)
-			cfgPath := filepath.Join(brainOverseerDir, "config.yaml")
-
-			// Brain dir may not exist yet — that's OK, it's created in Section 4.
-			// Only write if the dir exists; otherwise defer until brain scaffold runs.
-			if _, statErr := os.Stat(brainOverseerDir); statErr == nil {
-				doc, readErr := config.ReadConfigNode(cfgPath)
-				if readErr == nil {
-					if wantsDefaults {
-						config.SetDefaults(doc, gitDefaults)
-					}
-					if initialProfile != nil {
-						config.UpsertProfile(doc, *initialProfile)
-					}
-					_ = config.WriteConfigNode(cfgPath, doc)
-				}
-			}
-
-			if wantsDefaults {
-				fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("git defaults saved"))
-			}
-			if initialProfile != nil {
-				fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("profile "+initialProfile.Name+" created"))
-			}
-			fmt.Println()
 		}
 	}
 
@@ -193,15 +165,6 @@ func runSetup(_ *cobra.Command, _ []string) error {
 	fmt.Println()
 
 	overseerDir := config.BrainOverseerPath(cfg)
-
-	if !dryRun {
-		// Apply brainURL to brain config.yaml if provided.
-		if brainURL != "" && brainURL != existing.Brain.URL {
-			if err := setBrainConfigValue(overseerDir, "url", brainURL); err != nil {
-				fmt.Println(tui.WarnLine("brain", "could not write url to config.yaml: "+err.Error()))
-			}
-		}
-	}
 
 	dirs := []struct{ path, label string }{
 		{filepath.Join(overseerDir, "dotfiles"), "overseer/dotfiles/"},
@@ -249,6 +212,28 @@ func runSetup(_ *cobra.Command, _ []string) error {
 			}
 		}
 		fmt.Printf("  %s  %s\n", tui.StyleOK.Render("[create]"), tui.StyleNormal.Render(file.label))
+	}
+
+	if !dryRun {
+		// Written after the scaffold so config.yaml exists, and before brain git
+		// setup so the initial commit includes them.
+		if gitDefaults != nil || initialProfile != nil {
+			if err := writeGitConfig(filepath.Join(overseerDir, "config.yaml"), gitDefaults, initialProfile); err != nil {
+				fmt.Println(tui.WarnLine("git", "could not write git config to config.yaml: "+err.Error()))
+			} else {
+				if gitDefaults != nil {
+					fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("git defaults saved"))
+				}
+				if initialProfile != nil {
+					fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("profile "+initialProfile.Name+" created"))
+				}
+			}
+		}
+		if brainURL != "" && brainURL != existing.Brain.URL {
+			if err := setBrainConfigValue(overseerDir, "url", brainURL); err != nil {
+				fmt.Println(tui.WarnLine("brain", "could not write url to config.yaml: "+err.Error()))
+			}
+		}
 	}
 
 	fmt.Println()
@@ -383,6 +368,20 @@ func runSetupBrainGit(cfg *config.Config, configuredURL string) error {
 		return cloneExistingBrain(cfg, configuredURL)
 	}
 	return nil
+}
+
+func writeGitConfig(cfgPath string, defaults *config.GitDefaults, profile *config.GitProfile) error {
+	doc, err := config.ReadConfigNode(cfgPath)
+	if err != nil {
+		return err
+	}
+	if defaults != nil {
+		config.SetDefaults(doc, *defaults)
+	}
+	if profile != nil {
+		config.UpsertProfile(doc, *profile)
+	}
+	return config.WriteConfigNode(cfgPath, doc)
 }
 
 // setBrainConfigValue appends or updates a top-level key under `brain:` in
