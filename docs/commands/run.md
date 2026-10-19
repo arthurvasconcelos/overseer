@@ -29,7 +29,7 @@ overseer run --github personal -- gh repo list
 overseer run --env p24 -- make deploy
 
 # Use a raw 1Password account ID instead of an alias
-overseer run --env he7em6mxcdlsewgnzrqldjizi -- make deploy
+overseer run --env {{OP_ACCOUNT_ID}} -- make deploy
 ```
 
 ## How it works

@@ -43,7 +43,7 @@ You can also point your editor at the schema for inline validation and autocompl
 ```yaml
 secrets:
   environments:
-    p24: "he7em6mxcdlsewgnzrqldjizi"  # alias → 1Password account ID
+    p24: "{{OP_ACCOUNT_ID}}"  # alias → 1Password account ID
 ```
 
 | Key | Description |

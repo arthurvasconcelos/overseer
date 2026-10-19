@@ -17,7 +17,7 @@ Shows the account URL, email address, and USER UUID. The UUID is what you set as
   {
     "url": "my.1password.com",
     "email": "you@example.com",
-    "user_uuid": "he7em6mxcdlsewgnzrqldjizi"
+    "user_uuid": "{{OP_ACCOUNT_ID}}"
   }
 ]
 ```

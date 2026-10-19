@@ -50,7 +50,7 @@ Named environments let you inject all secrets from a 1Password account as enviro
 ```yaml
 secrets:
   environments:
-    p24: "he7em6mxcdlsewgnzrqldjizi"
+    p24: "{{OP_ACCOUNT_ID}}"
 ```
 
 Then use `overseer run --env p24 -- <command>` to run any command with those secrets injected. The alias `p24` maps to the 1Password account ID.
