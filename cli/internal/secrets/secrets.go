@@ -6,27 +6,21 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+
+	"github.com/arthurvasconcelos/overseer/internal/wsl"
 )
 
 // Binary returns the 1Password CLI executable to invoke. Under WSL the
 // desktop app integration only works through the Windows op.exe, which users
 // usually reach via a shell alias that exec.Command never sees.
 var Binary = sync.OnceValue(func() string {
-	if isWSL() {
+	if wsl.Detected() {
 		if path, err := exec.LookPath("op.exe"); err == nil {
 			return path
 		}
 	}
 	return "op"
 })
-
-func isWSL() bool {
-	if os.Getenv("WSL_DISTRO_NAME") != "" {
-		return true
-	}
-	data, err := os.ReadFile("/proc/sys/kernel/osrelease")
-	return err == nil && strings.Contains(strings.ToLower(string(data)), "microsoft")
-}
 
 // Read retrieves a secret from 1Password using a full op:// reference.
 // It shells out to: op read "op://vault/item/field"

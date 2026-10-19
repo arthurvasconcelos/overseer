@@ -10,6 +10,7 @@ import (
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
+	"github.com/arthurvasconcelos/overseer/internal/wsl"
 	"github.com/spf13/cobra"
 )
 
@@ -134,8 +135,29 @@ func defaultGPGSSHProgram() string {
 			}
 		}
 	case "linux":
+		if wsl.Detected() {
+			return wslGPGSSHProgram()
+		}
 		if path, err := exec.LookPath("op-ssh-sign"); err == nil {
 			return path
+		}
+	}
+	return ""
+}
+
+// wslGPGSSHProgram locates 1Password's WSL signer on the Windows side. Since
+// 1Password 8.11.18 it lives in WindowsApps, which WSL usually has on PATH;
+// older installs keep it under the app directory.
+func wslGPGSSHProgram() string {
+	if path, err := exec.LookPath("op-ssh-sign-wsl.exe"); err == nil {
+		return path
+	}
+	for _, pattern := range []string{
+		"/mnt/c/Users/*/AppData/Local/Microsoft/WindowsApps/op-ssh-sign-wsl.exe",
+		"/mnt/c/Users/*/AppData/Local/1Password/app/8/op-ssh-sign-wsl",
+	} {
+		if matches, _ := filepath.Glob(pattern); len(matches) > 0 {
+			return matches[0]
 		}
 	}
 	return ""
