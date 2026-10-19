@@ -1,3 +1,5 @@
+<img src="docs/public/images/logo-hero.svg" alt="" width="96">
+
 # overseer
 
 ![GitHub release](https://img.shields.io/github/v/release/arthurvasconcelos/overseer)

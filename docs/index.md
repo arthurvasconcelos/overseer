@@ -5,6 +5,9 @@ hero:
   name: "overseer"
   text: "Your developer workflow, one binary."
   tagline: "Git identities, repos, Homebrew, daily briefings, notes, and PR monitoring — one binary, driven by a private config repo you own."
+  image:
+    src: /images/logo-hero.svg
+    alt: overseer
   actions:
     - theme: brand
       text: Get started

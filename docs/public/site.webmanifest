@@ -1,7 +1,7 @@
 {
-  "name": "Hextra",
-  "short_name": "Hextra",
-  "start_url": "index.html",
+  "name": "overseer",
+  "short_name": "overseer",
+  "start_url": "./",
   "icons": [
     {
       "src": "android-chrome-192x192.png",
@@ -14,7 +14,7 @@
       "type": "image/png"
     }
   ],
-  "theme_color": "#000000",
-  "background_color": "#000000",
+  "theme_color": "#1e1a2e",
+  "background_color": "#1e1a2e",
   "display": "standalone"
 }

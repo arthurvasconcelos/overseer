@@ -94,6 +94,10 @@ export default defineConfig({
 
   head: [
     ["link", { rel: "icon", href: `${base}favicon.svg`, type: "image/svg+xml" }],
+    ["link", { rel: "icon", href: `${base}favicon-32x32.png`, type: "image/png", sizes: "32x32" }],
+    ["link", { rel: "apple-touch-icon", href: `${base}apple-touch-icon.png` }],
+    ["link", { rel: "manifest", href: `${base}site.webmanifest` }],
+    ["meta", { name: "theme-color", content: "#1e1a2e" }],
   ],
 
   transformHead({ pageData, page }: TransformContext): HeadConfig[] {
@@ -110,6 +114,8 @@ export default defineConfig({
   },
 
   themeConfig: {
+    logo: "/favicon.svg",
+
     nav: [
       { text: "Install", link: "/install" },
       { text: "Commands", link: "/commands/", activeMatch: "/commands/" },
