@@ -13,7 +13,14 @@ overseer merges two config files on every run. The local file always takes prece
 | File | Purpose |
 |---|---|
 | `brain/overseer/config.yaml` | Shared, portable, committed to your brain repo |
-| `~/.config/overseer/config.local.yaml` | Machine-local overrides — tokens, paths, never committed |
+| `<user config dir>/overseer/config.local.yaml` | Machine-local overrides — tokens, paths, never committed |
+
+The local file lives in your OS user config directory:
+
+| Platform | Path |
+|---|---|
+| Linux / WSL | `~/.config/overseer/config.local.yaml` (or `$XDG_CONFIG_HOME/overseer/` when set) |
+| macOS | `~/Library/Application Support/overseer/config.local.yaml` |
 
 Inspect the merged result at any time:
 
@@ -123,14 +130,20 @@ git:
 system:
   repos_path: ~/repos
   brain_path: ~/brain
+  gpg_ssh_program: /Applications/1Password.app/Contents/MacOS/op-ssh-sign
 ```
 
 | Key | Description |
 |---|---|
 | `system.repos_path` | Where managed repos are cloned |
 | `system.brain_path` | Override brain directory path for this machine |
+| `system.gpg_ssh_program` | SSH signing program for this machine. Used when neither the profile nor `git.defaults` sets one |
+| `system.ide` | Default IDE command (e.g. `code`, `idea`) |
+| `system.notifications` | Fire native desktop notifications on long-running commands |
 
 These belong in `config.local.yaml`, not the shared brain config.
+
+`gpg_ssh_program` resolves in this order: profile, then `git.defaults`, then `system`. The signer path differs per platform (`op-ssh-sign` on macOS, `op-ssh-sign-wsl.exe` on [WSL](/concepts/wsl)). If you share one brain across platforms, set it in `system` on each machine and leave it out of the brain config.
 
 ---
 

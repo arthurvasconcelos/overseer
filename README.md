@@ -15,7 +15,7 @@ Personal files (dotfiles, Brewfile, config) live in a separate **brain** directo
 ## Install
 
 ```bash
-# macOS (Homebrew) — recommended
+# Homebrew (macOS, Linux, WSL) — recommended
 brew install arthurvasconcelos/tap/overseer
 
 # Or via install script
@@ -23,6 +23,8 @@ curl -fsSL https://raw.githubusercontent.com/arthurvasconcelos/overseer/main/scr
 ```
 
 The install script drops the binary in `~/bin/`. Make sure `~/bin` is on your `PATH`.
+
+On WSL, 1Password, SSH and commit signing go through their Windows binaries (`op.exe`, `ssh.exe`, `op-ssh-sign-wsl.exe`). See the [WSL guide](https://arthurvasconcelos.github.io/overseer/concepts/wsl) before running setup.
 
 ---
 
@@ -32,7 +34,7 @@ The install script drops the binary in `~/bin/`. Make sure `~/bin` is on your `P
 overseer setup
 ```
 
-The interactive wizard walks through everything in one session: brain path, git remote, machine settings, directory scaffolding, dotfile wiring, and Brew packages.
+The interactive wizard walks through everything in one session: brain path, git remote, machine settings, your first git profile, directory scaffolding, dotfile wiring, and Brew packages.
 
 Safe to re-run anytime — existing values are shown as defaults and nothing is overwritten without your input.
 

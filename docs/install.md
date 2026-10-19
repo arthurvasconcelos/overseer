@@ -1,11 +1,13 @@
 ---
-description: Install overseer via Homebrew or from source, run the setup wizard, and configure shell completions.
+description: Install overseer via Homebrew on macOS, Linux or WSL, or from source, run the setup wizard, and configure shell completions.
 ---
 
 # Installation
 
 
-## Homebrew (macOS)
+## Homebrew (macOS, Linux, WSL)
+
+overseer ships as a Homebrew cask. The same command works on macOS, Linux and WSL.
 
 **Stable channel** (recommended):
 
@@ -18,6 +20,29 @@ brew install arthurvasconcelos/tap/overseer
 ```bash
 brew install arthurvasconcelos/tap/overseer-beta
 ```
+
+Upgrade with:
+
+```bash
+brew update && brew upgrade arthurvasconcelos/tap/overseer
+```
+
+On Linux and WSL, casks need a recent Homebrew. Run `brew update` first if the install complains about casks.
+
+::: tip On WSL?
+1Password and SSH need a few extra steps under WSL. See [WSL](/concepts/wsl) before running `overseer setup`.
+:::
+
+### Troubleshooting
+
+**`undefined method 'cask' for module Formulary::FormulaNamespace…`**: your local copy of the tap is from before the cask moved to the `Casks/` directory (fixed in v0.27.1). Refresh it:
+
+```bash
+brew update
+brew install arthurvasconcelos/tap/overseer
+```
+
+If it still fails, re-tap: `brew untap arthurvasconcelos/tap && brew install arthurvasconcelos/tap/overseer`.
 
 ## Manual install
 
@@ -43,12 +68,12 @@ echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc
 
 ## Build from source
 
-Requires Go 1.21+.
+Requires Go (the version in `cli/go.mod`) and [just](https://github.com/casey/just).
 
 ```bash
 git clone https://github.com/arthurvasconcelos/overseer.git
 cd overseer
-make dev
+just dev
 ```
 
 Builds and installs to `~/bin/overseer`.
@@ -63,7 +88,7 @@ Run the interactive wizard after installing:
 overseer setup
 ```
 
-This walks through brain path, git remote, machine settings, directory scaffolding, dotfile wiring, and Brew packages in one session. Existing values are shown as defaults and nothing is overwritten without your input. Safe to re-run at any time.
+This walks through brain path, git remote, machine settings, your first git profile, directory scaffolding, dotfile wiring, and Brew packages in one session. Existing values are shown as defaults and nothing is overwritten without your input. Safe to re-run at any time. See [`overseer setup`](/commands/setup) for each step.
 
 If you already have a brain and only want to re-apply config without the full wizard:
 

@@ -32,11 +32,18 @@ overseer brain pull
 
 ### `overseer brain push`
 
-Run `git push` in the brain directory.
+Commit every change in the brain and push it.
 
 ```bash
 overseer brain push
 ```
+
+- Applies `brain.git_profile` (if set) to the brain repo, then commits all changes with a message listing the affected files and the machine they came from.
+- On the first push to a new, empty remote it sets the upstream (`git push --set-upstream origin HEAD`). If there is no `origin` remote yet, it adds one from `brain.url`.
+- If there's nothing new to commit but earlier local commits never reached the remote (say, a previous push failed), it pushes those.
+- Prints "nothing to push, brain is up to date" when there's nothing to commit or push.
+
+Git does the SSH and commit signing using your git config and the profile's `gpg_ssh_program`. Under WSL both need the Windows binaries. See [WSL](/concepts/wsl).
 
 ### `overseer brain git-init`
 

@@ -53,6 +53,7 @@ function sidebarConcepts(): DefaultTheme.SidebarItem[] {
         { text: "Brain", link: "/concepts/brain" },
         { text: "Config", link: "/concepts/config" },
         { text: "Secrets", link: "/concepts/secrets" },
+        { text: "WSL", link: "/concepts/wsl" },
       ],
     },
   ];

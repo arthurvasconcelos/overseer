@@ -78,7 +78,9 @@ overseer git profile apply personal
 overseer git profile apply personal --global
 ```
 
-This sets `user.email`, `user.name`, `user.signingKey`, `gpg.format`, `gpg.ssh.program`, and `commit.gpgSign` in `.git/config` (or `~/.gitconfig` with `--global`).
+This sets `user.email`, `user.name`, `user.signingKey`, `gpg.format`, `gpg.ssh.program`, and `commit.gpgSign` in `.git/config` (or `~/.gitconfig` with `--global`). Other git settings, such as `core.sshCommand`, are left untouched.
+
+`gpg.ssh.program` comes from the profile's `gpg_ssh_program`, then `git.defaults`, then `system.gpg_ssh_program` in `config.local.yaml`. It must be a signer such as 1Password's `op-ssh-sign` (macOS) or `op-ssh-sign-wsl.exe` ([WSL](/concepts/wsl)), not `ssh`.
 
 ### defaults
 

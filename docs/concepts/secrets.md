@@ -25,6 +25,8 @@ integrations:
 
 When overseer reads this field, it calls `op read op://Personal/GitHub PAT/token` and substitutes the resolved value. The plaintext never touches the config file.
 
+This needs the [1Password CLI](https://www.1password.dev/cli/) with the desktop app integration turned on. Under WSL, overseer calls the Windows `op.exe` instead of `op`. See [WSL](/concepts/wsl).
+
 ## The `op_account` field
 
 If you have multiple 1Password accounts (e.g. personal and work), specify which account to use per integration:
