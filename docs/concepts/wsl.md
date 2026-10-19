@@ -41,19 +41,35 @@ This covers every git operation over SSH, including `overseer brain push`, `brai
 
 ## Commit signing: use `op-ssh-sign-wsl.exe`
 
-To sign commits, `gpg_ssh_program` must point at 1Password's **WSL signer**, not at `ssh.exe`:
+To sign commits, `gpg_ssh_program` must point at 1Password's **WSL signer**. Find it with:
 
 ```bash
 which op-ssh-sign-wsl.exe
 ```
 
-Since 1Password 8.11.18 the signer is at `/mnt/c/Users/<you>/AppData/Local/Microsoft/WindowsApps/op-ssh-sign-wsl.exe`. That folder is usually on the `PATH` WSL inherits from Windows. Older installs use `/mnt/c/Users/<you>/AppData/Local/1Password/app/8/op-ssh-sign-wsl`. In the 1Password app, **Settings → Developer → Configure Commit Signing** shows the right path for your install.
+Use the path this prints. Since 1Password 8.11.18 it's `/mnt/c/Users/<you>/AppData/Local/Microsoft/WindowsApps/op-ssh-sign-wsl.exe`. That folder is usually on the `PATH` WSL inherits from Windows.
 
-Since v0.27.3, `overseer setup` and `overseer init` find it and suggest it as the default. To set it by hand, put it in the machine-local config, `~/.config/overseer/config.local.yaml`:
+::: danger Not `ssh.exe`
+`which ssh.exe` prints a similar-looking path (`/mnt/c/WINDOWS/System32/OpenSSH/ssh.exe`), but that's the SSH **client** and belongs in `core.sshCommand`. Used as `gpg_ssh_program`, every commit fails with `ssh: Could not resolve hostname sign`.
+:::
+
+If `which` prints nothing:
+
+- Check the folder directly: `ls /mnt/c/Users/*/AppData/Local/Microsoft/WindowsApps/op-ssh-sign-wsl.exe`. If the file is there, Windows `PATH` isn't being passed into WSL; look for `appendWindowsPath = false` in `/etc/wsl.conf`. The full path still works for `gpg_ssh_program`.
+- Installs older than 8.11.18 put the signer at `/mnt/c/Users/<you>/AppData/Local/1Password/app/8/op-ssh-sign-wsl` (no `.exe`). Update 1Password, or use that path.
+- In the 1Password app, **Settings → Developer → Configure Commit Signing** shows the path for your install.
+
+Since v0.27.3, `overseer setup` and `overseer init` run the same lookup and suggest the result as the default. To set it by hand, paste the path into the machine-local config, `~/.config/overseer/config.local.yaml`:
 
 ```yaml
 system:
   gpg_ssh_program: /mnt/c/Users/<you>/AppData/Local/Microsoft/WindowsApps/op-ssh-sign-wsl.exe
+```
+
+Changing the config doesn't update repos that already have a profile applied, because the old value stays in their `.git/config`. `overseer brain push` re-applies the brain's profile on every run. For other repos, run `overseer git profile apply <name>` inside the repo, then check it:
+
+```bash
+git config gpg.ssh.program   # should print the op-ssh-sign-wsl.exe path
 ```
 
 ::: warning Keep the signer path machine-local
