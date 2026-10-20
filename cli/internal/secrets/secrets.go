@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -39,11 +40,27 @@ func ReadAs(ref, account string) (string, error) {
 	out, err := exec.Command(Binary(), args...).Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return "", fmt.Errorf("op read %s: %s", ref, strings.TrimSpace(string(exitErr.Stderr)))
+			return "", fmt.Errorf("op read %s: %s", ref, explainStderr(string(exitErr.Stderr)))
 		}
 		return "", fmt.Errorf("op read %s: %w", ref, err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// explainStderr replaces op's long account-setup help with a short hint when
+// the CLI cannot reach the desktop app, which is almost always the real cause.
+func explainStderr(stderr string) string {
+	stderr = strings.TrimSpace(stderr)
+	if !strings.Contains(stderr, "No accounts configured") {
+		return stderr
+	}
+	hint := "1Password CLI cannot see any accounts. Make sure the 1Password app is running " +
+		"with Settings → Developer → \"Integrate with 1Password CLI\" turned on, then check with `op account list`."
+	if runtime.GOOS == "darwin" {
+		hint += " If it is still empty, run `op account list --debug`: \"operation not permitted\" on settings.json " +
+			"means macOS is blocking your terminal from 1Password's app data (System Settings → Privacy & Security)."
+	}
+	return hint
 }
 
 // Get retrieves a secret from 1Password by vault, item, and field name.
