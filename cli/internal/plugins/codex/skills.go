@@ -219,7 +219,7 @@ func discoverSkills(cfg *config.Config) []skillInfo {
 	}
 
 	for _, searchPath := range skillSearchPaths(cfg) {
-		expanded := expandTilde(searchPath)
+		expanded := config.ExpandPath(searchPath)
 		entries, err := os.ReadDir(expanded)
 		if err != nil {
 			continue
@@ -259,17 +259,6 @@ func skillSearchPaths(cfg *config.Config) []string {
 func isLinkedTo(linkPath, targetPath string) bool {
 	current, err := os.Readlink(linkPath)
 	return err == nil && current == targetPath
-}
-
-func expandTilde(path string) string {
-	if !strings.HasPrefix(path, "~/") {
-		return path
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return path
-	}
-	return filepath.Join(home, path[2:])
 }
 
 func readSkillDescription(skillDir string) string {
@@ -316,7 +305,7 @@ func extractFrontmatterField(filePath, field string) string {
 // --- runners ---
 
 func runSkillsAddPath(cfg *config.Config, path string) error {
-	abs, err := filepath.Abs(expandTilde(path))
+	abs, err := filepath.Abs(config.ExpandPath(path))
 	if err != nil {
 		return fmt.Errorf("resolving path: %w", err)
 	}
@@ -391,7 +380,7 @@ func runSkillsRemovePathInteractive(cfg *config.Config) error {
 }
 
 func runSkillsRemovePath(cfg *config.Config, path string) error {
-	abs, err := filepath.Abs(expandTilde(path))
+	abs, err := filepath.Abs(config.ExpandPath(path))
 	if err != nil {
 		return fmt.Errorf("resolving path: %w", err)
 	}

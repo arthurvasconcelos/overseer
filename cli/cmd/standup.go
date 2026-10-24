@@ -97,7 +97,7 @@ func runStandup(_ *cobra.Command, _ []string) error {
 		}
 	}
 	for _, dir := range cfg.RepoDirs {
-		dir = expandHome(dir)
+		dir = config.ExpandPath(dir)
 		discovered := discoverRepos(dir)
 		for _, repoPath := range discovered {
 			rel, _ := filepath.Rel(dir, repoPath)

@@ -30,6 +30,15 @@ func init() {
 	rootCmd.AddCommand(setupCmd)
 }
 
+// brainSource is where setup gets the brain from.
+type brainSource int
+
+const (
+	brainOnDisk brainSource = iota // already present, cloned or copied earlier
+	brainClone                     // cloned from a remote during setup
+	brainNew                       // scaffolded from scratch
+)
+
 func runSetup(_ *cobra.Command, _ []string) error {
 	fmt.Println(tui.Logo(Version))
 	fmt.Println()
@@ -50,19 +59,10 @@ func runSetup(_ *cobra.Command, _ []string) error {
 	fmt.Println(tui.SectionHeader("brain", "where your personal config, dotfiles, and Brewfile live"))
 	fmt.Println()
 
-	currentBrain := config.ResolveBrainPath(existing)
-	brainPath, err := tui.Prompt("brain_path", currentBrain, currentBrain)
+	source, brainPath, brainURL, err := promptBrain(existing)
 	if err != nil {
 		return err
 	}
-	fmt.Println()
-
-	currentBrainURL := existing.Brain.URL
-	brainURL, err := tui.Prompt("brain remote URL (leave blank to skip)", currentBrainURL, currentBrainURL)
-	if err != nil {
-		return err
-	}
-	fmt.Println()
 
 	// -------------------------------------------------------------------------
 	// Section 2: Machine
@@ -91,48 +91,6 @@ func runSetup(_ *cobra.Command, _ []string) error {
 	fmt.Println()
 
 	// -------------------------------------------------------------------------
-	// Section 3: Git defaults + initial profile (skipped if profiles exist)
-	// -------------------------------------------------------------------------
-	fmt.Println(tui.SectionHeader("git", "identity profiles"))
-	fmt.Println()
-
-	var gitDefaults *config.GitDefaults
-	var initialProfile *config.GitProfile
-	if len(existing.Git.Profiles) > 0 {
-		fmt.Printf("  %s  %s\n", tui.StyleDim.Render("[skip]"), tui.StyleMuted.Render(fmt.Sprintf("%d profile(s) already configured", len(existing.Git.Profiles))))
-		fmt.Println()
-	} else {
-		wantsDefaults, err := tui.Confirm("configure git defaults (user name, gpg format, signing)?")
-		if err != nil {
-			return err
-		}
-		fmt.Println()
-
-		var defaults config.GitDefaults
-		if wantsDefaults {
-			defaults, err = promptDefaults(existing.Git.Defaults)
-			if err != nil {
-				return err
-			}
-			gitDefaults = &defaults
-		}
-
-		wantsProfile, err := tui.Confirm("create an initial git profile?")
-		if err != nil {
-			return err
-		}
-		fmt.Println()
-
-		if wantsProfile {
-			p, err := promptProfile(config.GitProfile{}, defaults)
-			if err != nil {
-				return err
-			}
-			initialProfile = &p
-		}
-	}
-
-	// -------------------------------------------------------------------------
 	// Write config.local.yaml
 	// -------------------------------------------------------------------------
 	localPath, err := config.LocalPath()
@@ -152,20 +110,172 @@ func runSetup(_ *cobra.Command, _ []string) error {
 	fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("wrote "+localPath))
 	fmt.Println()
 
-	// Reload config now that local is written, so brain paths resolve correctly.
+	// -------------------------------------------------------------------------
+	// Section 3: Clone — before anything that reads the brain's config
+	// -------------------------------------------------------------------------
+	if source == brainClone {
+		fmt.Println(tui.SectionHeader("brain", "clone "+brainURL))
+		fmt.Println()
+		if dryRun {
+			fmt.Printf("  %s\n", tui.StyleMuted.Render("would clone into "+brainPath))
+		} else if err := cloneBrain(brainURL, brainPath); err != nil {
+			return err
+		}
+		fmt.Println()
+	}
+
+	// Reload now that local config is written and the brain is in place, so
+	// profiles, overlays and brain settings come from the real brain.
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
+	overseerDir := config.BrainOverseerPath(cfg)
+	warnSharedSigner(cfg)
 
 	// -------------------------------------------------------------------------
-	// Section 3: Brain scaffold
+	// Section 4: Brain scaffold (new brains only)
 	// -------------------------------------------------------------------------
-	fmt.Println(tui.SectionHeader("brain", "scaffold directory structure"))
+	if source == brainNew {
+		fmt.Println(tui.SectionHeader("brain", "scaffold directory structure"))
+		fmt.Println()
+		if err := scaffoldBrain(overseerDir); err != nil {
+			return err
+		}
+		if !dryRun && brainURL != "" && brainURL != existing.Brain.URL {
+			if err := setBrainConfigValue(overseerDir, "url", brainURL); err != nil {
+				fmt.Println(tui.WarnLine("brain", "could not write url to config.yaml: "+err.Error()))
+			}
+		}
+		fmt.Println()
+	}
+
+	// -------------------------------------------------------------------------
+	// Section 5: Git defaults + initial profile (skipped if the brain has profiles)
+	// -------------------------------------------------------------------------
+	fmt.Println(tui.SectionHeader("git", "identity profiles"))
 	fmt.Println()
 
-	overseerDir := config.BrainOverseerPath(cfg)
+	if len(cfg.Git.Profiles) > 0 {
+		fmt.Printf("  %s  %s\n", tui.StyleDim.Render("[skip]"), tui.StyleMuted.Render(fmt.Sprintf("%d profile(s) already configured", len(cfg.Git.Profiles))))
+	} else if err := promptInitialGitConfig(cfg, filepath.Join(overseerDir, "config.yaml")); err != nil {
+		return err
+	}
+	fmt.Println()
 
+	// -------------------------------------------------------------------------
+	// Section 6: Brain version control
+	// -------------------------------------------------------------------------
+	fmt.Println(tui.SectionHeader("brain", "version control"))
+	fmt.Println()
+
+	if dryRun {
+		fmt.Printf("  %s\n", tui.StyleMuted.Render("skipped in dry-run mode"))
+	} else if err := runSetupBrainGit(cfg, brainURL); err != nil {
+		fmt.Println(tui.WarnLine("git", err.Error()))
+	}
+
+	fmt.Println()
+
+	// -------------------------------------------------------------------------
+	// Section 7: Dotfiles
+	// -------------------------------------------------------------------------
+	fmt.Println(tui.SectionHeader("dotfiles", "wire from brain into ~/"))
+	fmt.Println()
+
+	if err := wireDotfiles(cfg, dryRun); err != nil {
+		return err
+	}
+
+	fmt.Println()
+
+	// -------------------------------------------------------------------------
+	// Section 8: Packages (macOS only)
+	// -------------------------------------------------------------------------
+	if runtime.GOOS == "darwin" && brewAvailable() {
+		fmt.Println(tui.SectionHeader("packages", "install Brewfile packages"))
+		fmt.Println()
+		if err := runBrewInstall(nil, nil); err != nil {
+			fmt.Println(tui.WarnLine("brew", err.Error()))
+		}
+		fmt.Println()
+	}
+
+	// -------------------------------------------------------------------------
+	// Done
+	// -------------------------------------------------------------------------
+	fmt.Println(tui.StyleOK.Render("✓") + "  " + tui.StyleNormal.Render("setup complete"))
+	fmt.Println()
+	if source == brainNew {
+		fmt.Println(tui.StyleMuted.Render("Next: edit " + filepath.Join(overseerDir, "config.yaml") + " to add integrations and git profiles."))
+	} else {
+		fmt.Println(tui.StyleMuted.Render("Next: overseer brain status — checks for paths that only work on another platform."))
+	}
+
+	return nil
+}
+
+// promptBrain decides where the brain comes from. A brain already at the
+// resolved path is used without asking; otherwise the user picks between
+// cloning, starting fresh, or pointing at a brain elsewhere on disk.
+func promptBrain(existing *config.Config) (brainSource, string, string, error) {
+	currentBrain := config.ResolveBrainPath(existing)
+	if _, err := os.Stat(filepath.Join(currentBrain, "overseer", "config.yaml")); err == nil {
+		fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("using brain at "+currentBrain))
+		fmt.Println()
+		return brainOnDisk, currentBrain, existing.Brain.URL, nil
+	}
+
+	idx, err := tui.Select("no brain found at "+currentBrain+" — where does it come from?", []tui.SelectItem{
+		{Title: "clone existing", Subtitle: "you already have a brain repository — clone it here"},
+		{Title: "start new", Subtitle: "scaffold a fresh brain, optionally under git"},
+		{Title: "already on disk", Subtitle: "a brain exists in another directory on this machine"},
+	})
+	if err != nil {
+		return 0, "", "", err
+	}
+	if idx == -1 {
+		return 0, "", "", fmt.Errorf("setup cancelled")
+	}
+	fmt.Println()
+	source := []brainSource{brainClone, brainNew, brainOnDisk}[idx]
+
+	brainPath, err := tui.Prompt("brain_path", currentBrain, currentBrain)
+	if err != nil {
+		return 0, "", "", err
+	}
+	brainPath = config.ExpandPath(brainPath)
+	fmt.Println()
+
+	switch source {
+	case brainOnDisk:
+		if _, err := os.Stat(filepath.Join(brainPath, "overseer", "config.yaml")); err != nil {
+			return 0, "", "", fmt.Errorf("no overseer/config.yaml under %s", brainPath)
+		}
+		return source, brainPath, existing.Brain.URL, nil
+	case brainClone:
+		brainURL, err := tui.Prompt("brain remote URL", existing.Brain.URL, "")
+		if err != nil {
+			return 0, "", "", err
+		}
+		if brainURL == "" {
+			return 0, "", "", fmt.Errorf("a remote URL is required to clone a brain")
+		}
+		fmt.Println()
+		return source, brainPath, brainURL, nil
+	}
+
+	brainURL, err := tui.Prompt("brain remote URL (leave blank to skip)", existing.Brain.URL, existing.Brain.URL)
+	if err != nil {
+		return 0, "", "", err
+	}
+	fmt.Println()
+	return source, brainPath, brainURL, nil
+}
+
+// scaffoldBrain creates the brain directory layout and starter files,
+// skipping anything that already exists.
+func scaffoldBrain(overseerDir string) error {
 	dirs := []struct{ path, label string }{
 		{filepath.Join(overseerDir, "dotfiles"), "overseer/dotfiles/"},
 		{filepath.Join(overseerDir, "plugins"), "overseer/plugins/"},
@@ -213,100 +323,94 @@ func runSetup(_ *cobra.Command, _ []string) error {
 		}
 		fmt.Printf("  %s  %s\n", tui.StyleOK.Render("[create]"), tui.StyleNormal.Render(file.label))
 	}
+	return nil
+}
 
-	if !dryRun {
-		// Written after the scaffold so config.yaml exists, and before brain git
-		// setup so the initial commit includes them.
-		if gitDefaults != nil || initialProfile != nil {
-			if err := writeGitConfig(filepath.Join(overseerDir, "config.yaml"), gitDefaults, initialProfile); err != nil {
-				fmt.Println(tui.WarnLine("git", "could not write git config to config.yaml: "+err.Error()))
-			} else {
-				if gitDefaults != nil {
-					fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("git defaults saved"))
-				}
-				if initialProfile != nil {
-					fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("profile "+initialProfile.Name+" created"))
-				}
-			}
-		}
-		if brainURL != "" && brainURL != existing.Brain.URL {
-			if err := setBrainConfigValue(overseerDir, "url", brainURL); err != nil {
-				fmt.Println(tui.WarnLine("brain", "could not write url to config.yaml: "+err.Error()))
-			}
-		}
+// promptInitialGitConfig offers to create git defaults and a first profile and
+// writes them to the brain config.
+func promptInitialGitConfig(cfg *config.Config, cfgPath string) error {
+	wantsDefaults, err := tui.Confirm("configure git defaults (user name, gpg format, signing)?")
+	if err != nil {
+		return err
 	}
-
 	fmt.Println()
 
-	// -------------------------------------------------------------------------
-	// Section 4: Brain version control (optional)
-	// -------------------------------------------------------------------------
-	fmt.Println(tui.SectionHeader("brain", "version control (optional)"))
-	fmt.Println()
-
-	if !dryRun {
-		if err := runSetupBrainGit(cfg, brainURL); err != nil {
-			fmt.Println(tui.WarnLine("git", err.Error()))
-		}
-	} else {
-		fmt.Printf("  %s\n", tui.StyleMuted.Render("skipped in dry-run mode"))
-	}
-
-	fmt.Println()
-
-	// -------------------------------------------------------------------------
-	// Section 5: Dotfiles
-	// -------------------------------------------------------------------------
-	fmt.Println(tui.SectionHeader("dotfiles", "wire from brain into ~/"))
-	fmt.Println()
-
-	dotfilesDir := filepath.Join(overseerDir, "dotfiles")
-	if _, err := os.Stat(dotfilesDir); os.IsNotExist(err) {
-		fmt.Printf("  %s\n", tui.StyleMuted.Render("no dotfiles found — add files under "+dotfilesDir+"/"))
-	} else {
-		home, err := os.UserHomeDir()
+	var gitDefaults *config.GitDefaults
+	var defaults config.GitDefaults
+	if wantsDefaults {
+		defaults, err = promptDefaults(cfg.Git.Defaults)
 		if err != nil {
 			return err
 		}
-		if err := symlink.MakeAll(dotfilesDir, home, dryRun); err != nil {
-			return fmt.Errorf("wiring dotfiles: %w", err)
-		}
+		gitDefaults = &defaults
 	}
 
+	wantsProfile, err := tui.Confirm("create an initial git profile?")
+	if err != nil {
+		return err
+	}
 	fmt.Println()
 
-	// -------------------------------------------------------------------------
-	// Section 5: Packages (macOS only)
-	// -------------------------------------------------------------------------
-	if runtime.GOOS == "darwin" && brewAvailable() {
-		fmt.Println(tui.SectionHeader("packages", "install Brewfile packages"))
-		fmt.Println()
-		if err := runBrewInstall(nil, nil); err != nil {
-			fmt.Println(tui.WarnLine("brew", err.Error()))
+	var initialProfile *config.GitProfile
+	if wantsProfile {
+		p, err := promptProfile(config.GitProfile{}, defaults)
+		if err != nil {
+			return err
 		}
-		fmt.Println()
+		initialProfile = &p
 	}
 
-	// -------------------------------------------------------------------------
-	// Done
-	// -------------------------------------------------------------------------
-	fmt.Println(tui.StyleOK.Render("✓") + "  " + tui.StyleNormal.Render("setup complete"))
-	fmt.Println()
-	fmt.Println(tui.StyleMuted.Render("Next: edit "+filepath.Join(overseerDir, "config.yaml")+" to add integrations and git profiles."))
+	if dryRun || (gitDefaults == nil && initialProfile == nil) {
+		return nil
+	}
+	if err := writeGitConfig(cfgPath, gitDefaults, initialProfile); err != nil {
+		fmt.Println(tui.WarnLine("git", "could not write git config to config.yaml: "+err.Error()))
+		return nil
+	}
+	if gitDefaults != nil {
+		fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("git defaults saved"))
+	}
+	if initialProfile != nil {
+		fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("profile "+initialProfile.Name+" created"))
+	}
+	return nil
+}
 
+// warnSharedSigner flags a signer set in the brain that overrides this
+// machine's system.gpg_ssh_program, a common breakage when a brain made on
+// macOS is cloned on Linux or WSL.
+func warnSharedSigner(cfg *config.Config) {
+	shared := cfg.Git.Defaults.GPGSSHProgram
+	if shared == "" || shared == cfg.System.GPGSSHProgram {
+		return
+	}
+	if _, err := os.Stat(shared); err == nil {
+		return
+	}
+	fmt.Println(tui.WarnLine("git", "git.defaults.gpg_ssh_program ("+shared+") doesn't exist here and overrides system.gpg_ssh_program — move it to config."+config.Platform()+".yaml in the brain"))
+	fmt.Println()
+}
+
+// wireDotfiles links dotfiles/ and the dotfiles.<platform> overlays into ~/.
+func wireDotfiles(cfg *config.Config, dry bool) error {
+	dirs := config.DotfilesDirs(cfg)
+	if _, err := os.Stat(dirs[0]); os.IsNotExist(err) {
+		fmt.Printf("  %s\n", tui.StyleMuted.Render("no dotfiles found — add files under "+dirs[0]+"/"))
+		return nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	if err := symlink.MakeAll(dirs, config.BrainOverseerPath(cfg), home, dry); err != nil {
+		return fmt.Errorf("wiring dotfiles: %w", err)
+	}
 	return nil
 }
 
 // runBrainSetup wires dotfiles from brain and installs Brew packages.
 // Shared by overseer brain setup.
 func runBrainSetup(cfg *config.Config, dry bool) error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-
-	brainOverseer := config.BrainOverseerPath(cfg)
-
 	if dry {
 		fmt.Println("overseer setup (dry run)")
 	} else {
@@ -314,13 +418,8 @@ func runBrainSetup(cfg *config.Config, dry bool) error {
 	}
 	fmt.Printf("  brain: %s\n\n", config.ResolveBrainPath(cfg))
 
-	dotfilesDir := filepath.Join(brainOverseer, "dotfiles")
-	if _, err := os.Stat(dotfilesDir); os.IsNotExist(err) {
-		fmt.Println(tui.WarnLine("setup", "dotfiles not found in brain — run: overseer setup"))
-	} else {
-		if err := symlink.MakeAll(dotfilesDir, home, dry); err != nil {
-			return fmt.Errorf("wiring dotfiles: %w", err)
-		}
+	if err := wireDotfiles(cfg, dry); err != nil {
+		return err
 	}
 
 	if runtime.GOOS == "darwin" && brewAvailable() {
@@ -334,13 +433,15 @@ func runBrainSetup(cfg *config.Config, dry bool) error {
 	return nil
 }
 
-// runSetupBrainGit is called from the setup wizard to optionally initialize
-// the brain as a git repository. It is a no-op if the brain is already a repo.
+// runSetupBrainGit is called from the setup wizard. A brain that is already a
+// repository gets brain.git_profile applied; otherwise the user may turn it
+// into one.
 func runSetupBrainGit(cfg *config.Config, configuredURL string) error {
 	brainPath := config.ResolveBrainPath(cfg)
 
 	if brainIsGit(brainPath) {
-		fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("already a git repository — skipping"))
+		fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("git repository"))
+		applyBrainGitProfile(brainPath, cfg)
 		return nil
 	}
 
@@ -350,24 +451,7 @@ func runSetupBrainGit(cfg *config.Config, configuredURL string) error {
 		return nil
 	}
 	fmt.Println()
-
-	idx, err := tui.Select("new brain or clone an existing repository?", []tui.SelectItem{
-		{Title: "new brain", Subtitle: "git init + optional remote + initial commit"},
-		{Title: "clone existing", Subtitle: "fetch from a remote and replace local files"},
-	})
-	if err != nil || idx == -1 {
-		fmt.Printf("  %s\n", tui.StyleMuted.Render("skipped"))
-		return nil
-	}
-	fmt.Println()
-
-	switch idx {
-	case 0:
-		return initBrainRepo(cfg, configuredURL)
-	case 1:
-		return cloneExistingBrain(cfg, configuredURL)
-	}
-	return nil
+	return initBrainRepo(cfg, configuredURL)
 }
 
 func writeGitConfig(cfgPath string, defaults *config.GitDefaults, profile *config.GitProfile) error {

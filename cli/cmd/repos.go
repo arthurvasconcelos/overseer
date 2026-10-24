@@ -245,15 +245,6 @@ func repoToHTTPS(remote string) string {
 	return ""
 }
 
-// resolvePath returns the absolute path for an arbitrary string path:
-// absolute paths are returned as-is; relative paths are joined with home.
-func resolvePath(home, path string) string {
-	if filepath.IsAbs(path) {
-		return path
-	}
-	return filepath.Join(home, path)
-}
-
 // repoRoot returns the absolute local path for a repo.
 // Resolution order:
 //  1. repo.Path (absolute, or relative to reposHome) — full override
@@ -261,10 +252,7 @@ func resolvePath(home, path string) string {
 //  3. repo.Name only                    — reposHome/name
 func repoRoot(reposHome string, repo config.RepoConfig) string {
 	if repo.Path != "" {
-		if filepath.IsAbs(repo.Path) {
-			return repo.Path
-		}
-		return filepath.Join(reposHome, repo.Path)
+		return config.ResolvePath(reposHome, repo.Path)
 	}
 	if repo.Folder != "" {
 		return filepath.Join(reposHome, repo.Folder, repo.Name)
@@ -276,11 +264,8 @@ func repoRoot(reposHome string, repo config.RepoConfig) string {
 // 1. OVERSEER_REPOS_PATH env var
 // 2. system.repos_path in config (brain or local)
 func resolveReposPath(cfg *config.Config) (string, error) {
-	if h := os.Getenv("OVERSEER_REPOS_PATH"); h != "" {
+	if h := config.ResolveReposPath(cfg); h != "" {
 		return h, nil
-	}
-	if cfg.System.ReposPath != "" {
-		return expandHome(cfg.System.ReposPath), nil
 	}
 	return "", fmt.Errorf(
 		"repos_path not configured\n\n" +
@@ -289,18 +274,6 @@ func resolveReposPath(cfg *config.Config) (string, error) {
 			"    repos_path: ~/repos\n\n" +
 			"Or set the OVERSEER_REPOS_PATH environment variable.",
 	)
-}
-
-func expandHome(path string) string {
-	if path == "~" {
-		home, _ := os.UserHomeDir()
-		return home
-	}
-	if len(path) >= 2 && path[:2] == "~/" {
-		home, _ := os.UserHomeDir()
-		return filepath.Join(home, path[2:])
-	}
-	return path
 }
 
 type repoResult struct {

@@ -21,7 +21,8 @@ The brain is a private git repo that holds your personal configuration. It is se
 
 ### Config files (two-layer merge)
 1. `brain/overseer/config.yaml` — shared, portable, committed to the brain repo
-2. `<user config dir>/overseer/config.local.yaml` — machine-local overrides (tokens, paths), never committed. Linux/WSL: `~/.config/overseer/` (or `$XDG_CONFIG_HOME/overseer/`); macOS: `~/Library/Application Support/overseer/`
+2. `brain/overseer/config.<platform>.yaml` — optional per-platform overlays: `darwin`, `linux`; WSL loads `linux` then `wsl`. Maps merge key by key, lists are replaced whole.
+3. `<user config dir>/overseer/config.local.yaml` — machine-local overrides (tokens, paths), never committed. Linux/WSL: `~/.config/overseer/` (or `$XDG_CONFIG_HOME/overseer/`); macOS: `~/Library/Application Support/overseer/`
 
 ### 1Password secret references
 Fields that accept secrets use `op://vault/item/field` references resolved at runtime via the `op` CLI. The actual secret is never stored in the config file. Run `overseer accounts` to find your 1Password account IDs.
@@ -30,7 +31,8 @@ Fields that accept secrets use `op://vault/item/field` references resolved at ru
 Under WSL, 1Password lives on the Windows side:
 - overseer calls the Windows `op.exe` (when on PATH) instead of `op`. Don't install the Linux `op`; it can't reach the desktop app.
 - Git needs `git config --global core.sshCommand ssh.exe` to use the 1Password SSH agent.
-- `gpg_ssh_program` must be 1Password's WSL signer `op-ssh-sign-wsl.exe` (usually `/mnt/c/Users/<you>/AppData/Local/Microsoft/WindowsApps/`), not `ssh.exe`. `overseer setup` suggests it as the default. Set it in `config.local.yaml` under `system`, because profile and `git.defaults` values take precedence over `system`.
+- `gpg_ssh_program` must be 1Password's WSL signer `op-ssh-sign-wsl.exe` (usually `/mnt/c/Users/<you>/AppData/Local/Microsoft/WindowsApps/`), not `ssh.exe`. `overseer setup` suggests it as the default. Set it in `config.local.yaml` under `system` or in the brain's `config.wsl.yaml`, never in the shared `config.yaml`, because profile and `git.defaults` values take precedence over `system`.
+- When cloning a brain over SSH, `overseer setup` and `overseer brain clone` offer to set `core.sshCommand` to `ssh.exe` if it's unset.
 
 ---
 
@@ -45,7 +47,7 @@ brew install arthurvasconcelos/tap/overseer
 
 First-time setup:
 ```bash
-overseer setup       # interactive wizard: brain, machine settings, first git profile, scaffold, dotfiles
+overseer setup       # interactive wizard: clone/new/existing brain, machine settings, git profile, dotfiles
 overseer brain setup # re-apply dotfiles and Brew packages without the wizard
 ```
 
@@ -54,7 +56,7 @@ overseer brain setup # re-apply dotfiles and Brew packages without the wizard
 ## Commands
 
 ### overseer setup
-Interactive wizard for a new machine: prompts for brain path and remote, `repos_path` and `gpg_ssh_program` (platform-aware default, including `op-ssh-sign-wsl.exe` under WSL), optional git defaults and a first profile; writes `config.local.yaml`; scaffolds the brain and saves the profile and remote URL into its `config.yaml`; optionally initializes or clones the brain git repo; symlinks dotfiles; runs `brew bundle` on macOS.
+Interactive wizard for a new machine: uses the brain at the resolved path, or asks whether to clone an existing one, start a new one, or use one elsewhere on disk; prompts for `repos_path` and `gpg_ssh_program` (platform-aware default, including `op-ssh-sign-wsl.exe` under WSL); writes `config.local.yaml`; clones the brain (into an empty directory) before anything reads its config; scaffolds new brains only; offers git defaults and a first profile when the brain has none; applies `brain.git_profile` or offers `git init`; symlinks `dotfiles/` plus `dotfiles.<platform>/` overlays; runs `brew bundle` on macOS.
 
 Flags:
 - `--dry-run` — show what would happen without making changes
@@ -63,9 +65,9 @@ Flags:
 Manages the brain directory.
 
 Subcommands:
-- `overseer brain init` — clone the brain repo from brain.url
-- `overseer brain setup` — pull latest brain changes and re-apply config
-- `overseer brain status` — show brain git status and health
+- `overseer brain clone [url]` — clone an existing brain (URL defaults to brain.url) into an empty brain path and apply brain.git_profile
+- `overseer brain setup` — wire dotfiles (with platform overlays) and install Brew packages
+- `overseer brain status` — show brain git status, platform overlays, dotfile wiring, and non-portable paths in shared config/dotfiles; `--fix` rewrites home paths in the shared config.yaml as `~/` and moves `git.defaults.gpg_ssh_program` to its `config.<platform>.yaml`
 - `overseer brain pull` — git pull the brain repo
 - `overseer brain push` — commit all brain changes (using `brain.git_profile`) and push; sets the upstream on the first push to a new remote (adding `origin` from `brain.url` if missing) and pushes earlier unpushed commits
 - `overseer brain git-init` — initialise a new git repo in the brain directory
@@ -425,3 +427,4 @@ Plugin SDKs are published to PyPI (`pip install overseer-sdk`) and npm (`npm ins
 |----------|-------------|
 | `OVERSEER_BRAIN` | Override brain directory path |
 | `OVERSEER_REPOS_PATH` | Override repos root directory |
+| `OVERSEER_PLATFORM` | Override platform detection (`darwin`, `linux`, `wsl`) for config and dotfile overlays |

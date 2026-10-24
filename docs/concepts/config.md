@@ -8,7 +8,7 @@ outline: deep
 
 ## Two config files
 
-overseer merges two config files on every run. The local file always takes precedence:
+overseer merges two config files on every run, plus optional [platform overlays](#layers). The local file always takes precedence:
 
 | File | Purpose |
 |---|---|
@@ -21,6 +21,26 @@ The local file lives in your OS user config directory:
 |---|---|
 | Linux / WSL | `~/.config/overseer/config.local.yaml` (or `$XDG_CONFIG_HOME/overseer/` when set) |
 | macOS | `~/Library/Application Support/overseer/config.local.yaml` |
+
+## Layers
+
+The full merge order, later files overriding earlier ones:
+
+1. `brain/overseer/config.yaml`: shared by every machine
+2. `brain/overseer/config.<platform>.yaml`: shared by every machine on one platform. `darwin` on macOS, `linux` on Linux. WSL loads `config.linux.yaml` and then `config.wsl.yaml`.
+3. `config.local.yaml`: this machine only, not versioned
+
+Maps merge key by key, so an overlay only needs the keys it changes. Lists (`repos`, `repo_dirs`, `skill_search_paths`, ...) are replaced whole by the later file.
+
+```yaml [brain/overseer/config.wsl.yaml]
+obsidian:
+  vault_path: /mnt/c/Users/you/Documents/Notes
+git:
+  defaults:
+    gpg_ssh_program: /mnt/c/Users/you/AppData/Local/Microsoft/WindowsApps/op-ssh-sign-wsl.exe
+```
+
+Set `OVERSEER_PLATFORM` to preview another platform's merged config, for example `OVERSEER_PLATFORM=wsl overseer config --format json`.
 
 Inspect the merged result at any time:
 
@@ -143,7 +163,9 @@ system:
 
 These belong in `config.local.yaml`, not the shared brain config.
 
-`gpg_ssh_program` resolves in this order: profile, then `git.defaults`, then `system`. The signer path differs per platform (`op-ssh-sign` on macOS, `op-ssh-sign-wsl.exe` on [WSL](/concepts/wsl)). If you share one brain across platforms, set it in `system` on each machine and leave it out of the brain config.
+`gpg_ssh_program` resolves in this order: profile, then `git.defaults`, then `system`. The signer path differs per platform (`op-ssh-sign` on macOS, `op-ssh-sign-wsl.exe` on [WSL](/concepts/wsl)). If you share one brain across platforms, set `git.defaults.gpg_ssh_program` in each `config.<platform>.yaml`, or set `system.gpg_ssh_program` on each machine, and leave it out of the shared `config.yaml`.
+
+`~`, `$HOME` and other environment variables are expanded in every path setting.
 
 ---
 
@@ -158,7 +180,7 @@ brain:
 
 | Key | Description |
 |---|---|
-| `brain.path` | Canonical brain path (portable across machines) |
+| `brain.path` | Canonical brain path (portable across machines, e.g. `~/brain`) |
 | `brain.url` | Git remote for cloning and pushing |
 | `brain.git_profile` | Git profile to use for brain commits |
 
@@ -177,7 +199,7 @@ obsidian:
 
 | Key | Description |
 |---|---|
-| `obsidian.vault_path` | Absolute path to your Obsidian vault |
+| `obsidian.vault_path` | Your Obsidian vault: absolute, `~/...`, or relative to `system.repos_path` |
 | `obsidian.vault_name` | Vault name as registered in Obsidian |
 | `obsidian.daily_notes_folder` | Folder for daily notes |
 | `obsidian.templates_folder` | Folder for note templates |

@@ -15,6 +15,12 @@ Install [Homebrew on Linux](https://docs.brew.sh/Homebrew-on-Linux) inside WSL, 
 brew install arthurvasconcelos/tap/overseer
 ```
 
+## Bringing over an existing brain
+
+Set up the 1Password CLI and `ssh.exe` below first, then run `overseer setup` and pick **clone existing**. If `core.sshCommand` isn't set when you clone over SSH, setup offers to set it to `ssh.exe`.
+
+Afterwards, `overseer brain status` lists the macOS-only paths in your shared config and dotfiles. Move those into `config.wsl.yaml` / `dotfiles.wsl/` (or `config.darwin.yaml` / `dotfiles.darwin/` for the macOS side). See [Brain → Platforms](/concepts/brain#platforms).
+
 ## 1Password CLI: use `op.exe`
 
 The 1Password desktop app integration only works through the **Windows** CLI, `op.exe`. Install 1Password and its CLI on Windows, turn on **Settings → Developer → Integrate with 1Password CLI**, and alias it in your WSL shell:
@@ -37,7 +43,9 @@ Git in WSL uses the Linux `ssh`, which can't reach the 1Password SSH agent. Poin
 git config --global core.sshCommand ssh.exe
 ```
 
-This covers every git operation over SSH, including `overseer brain push`, `brain pull` and `repos pull`. overseer never overwrites `core.sshCommand`. Applying a git profile only sets `user.*`, `gpg.*` and `commit.gpgsign`.
+This covers every git operation over SSH, including `overseer brain push`, `brain pull` and `repos pull`. overseer never overwrites `core.sshCommand`. It only offers to set it, when it's unset, before cloning a brain over SSH. Applying a git profile only sets `user.*`, `gpg.*` and `commit.gpgsign`.
+
+If your brain has a `.gitconfig` dotfile, add the setting to a WSL-only copy at `dotfiles.wsl/.gitconfig` instead, so it survives `overseer brain setup` without affecting macOS.
 
 ## Commit signing: use `op-ssh-sign-wsl.exe`
 
@@ -72,8 +80,8 @@ Changing the config doesn't update repos that already have a profile applied, be
 git config gpg.ssh.program   # should print the op-ssh-sign-wsl.exe path
 ```
 
-::: warning Keep the signer path machine-local
-For `gpg_ssh_program`, the profile value wins over `git.defaults`, which wins over `system`. If your brain's `config.yaml` sets `gpg_ssh_program` under `git.defaults` or on a profile (say, the macOS `op-ssh-sign` path), it overrides the WSL path in `config.local.yaml`. If the same brain is used on different platforms, set `gpg_ssh_program` only in each machine's `config.local.yaml`.
+::: warning Keep the signer path out of the shared config
+For `gpg_ssh_program`, the profile value wins over `git.defaults`, which wins over `system`. If your brain's shared `config.yaml` sets `gpg_ssh_program` under `git.defaults` or on a profile (say, the macOS `op-ssh-sign` path), it overrides the WSL path in `config.local.yaml`. `overseer setup` warns when that happens. Move the value to `config.darwin.yaml` and put the WSL signer in `config.wsl.yaml`, or set it only in each machine's `config.local.yaml`.
 :::
 
 ## Troubleshooting

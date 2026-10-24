@@ -85,7 +85,7 @@
 
 # --- Obsidian vault (referenced, not owned by brain) ---
 # obsidian:
-#   vault_path: /absolute/path/to/your/vault
+#   vault_path: ~/path/to/your/vault  # ~/ keeps it valid on every machine
 #   vault_name: MyVault              # as registered in the Obsidian app
 #   daily_notes_folder: Daily
 #   templates_folder: Templates

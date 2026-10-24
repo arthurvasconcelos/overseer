@@ -249,11 +249,10 @@ func dailyNotePath(cfg *config.Config, date string) (string, bool) {
 	if cfg.Obsidian.VaultPath == "" {
 		return "", false
 	}
-	home, err := resolveReposPath(cfg)
-	if err != nil {
+	if _, err := resolveReposPath(cfg); err != nil {
 		return "", false
 	}
-	vault := resolvePath(home, cfg.Obsidian.VaultPath)
+	vault := config.ResolveVaultPath(cfg)
 	path := filepath.Join(vault, cfg.Obsidian.DailyNotesFolder, date+".md")
 	_, statErr := os.Stat(path)
 	return path, statErr == nil
@@ -285,7 +284,7 @@ func gatherCommits(cfg *config.Config, dayStart, dayEnd time.Time) ([]JournalCom
 		record(repoRoot(home, repo), repo.Name)
 	}
 	for _, dir := range cfg.RepoDirs {
-		dir = expandHome(dir)
+		dir = config.ExpandPath(dir)
 		// The directory itself is often a repo too (a mono-index of clones);
 		// discoverRepos only walks its children.
 		if isGitRepo(dir) {

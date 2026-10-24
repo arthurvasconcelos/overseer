@@ -5,17 +5,22 @@ Manage the brain directory. See [Concepts → Brain](/concepts/brain) for what t
 
 ## Subcommands
 
-### `overseer brain init`
+### `overseer brain clone`
 
-Clone the brain repo from `brain.url` in config. Use this on a fresh machine to pull down your existing brain.
+Clone an existing brain onto this machine, into the resolved brain path, then apply `brain.git_profile` to it. The URL defaults to `brain.url` in config.
 
 ```bash
-overseer brain init
+overseer brain clone git@github.com:you/brain.git
 ```
+
+- The brain path must be empty or missing. If it's already a git repository, nothing is changed.
+- Under [WSL](/concepts/wsl), cloning over SSH first offers to set `core.sshCommand` to `ssh.exe` if it isn't set.
+
+Run `overseer setup` afterwards for machine settings and dotfiles. `overseer setup` can also do the clone itself.
 
 ### `overseer brain setup`
 
-Pull the latest brain changes and re-apply config: symlinks dotfiles, installs Brew packages, and applies git profiles. Equivalent to running the relevant parts of the setup wizard without the interactive prompts.
+Re-apply the brain without the wizard: symlinks dotfiles (`dotfiles/` plus the `dotfiles.<platform>/` overlays, see [Brain → Platforms](/concepts/brain#platforms)) and installs Brew packages on macOS.
 
 ```bash
 overseer brain setup
@@ -55,11 +60,19 @@ overseer brain git-init
 
 ### `overseer brain status`
 
-Show brain directory health: git status, last commit, and whether dotfile symlinks are in place.
+Show brain directory health: git status, platform overlays in use, whether dotfile symlinks are in place, and shared content that only works on some platforms (absolute paths in `config.yaml`, platform-specific paths in `dotfiles/`).
 
 ```bash
 overseer brain status
+overseer brain status --fix   # repair what can be repaired automatically, then report the rest
 ```
+
+`--fix` edits the shared `config.yaml` line by line, keeping comments and formatting:
+
+- Absolute paths in your home folder become `~/...`. Paths under `/Users/<you>` or `/home/<you>` count too, so a path written on another platform is caught.
+- `git.defaults.gpg_ssh_program` moves to the `config.<platform>.yaml` its value belongs to (`/Applications/...` → `darwin`, `.exe` or `/mnt/...` → `wsl`). An overlay that already sets it keeps its own value.
+
+Everything else stays listed for you to fix by hand: other absolute paths, signers set on a profile (overlays replace the whole profiles list, so they can't be moved one at a time), and dotfiles. Review the result with `git -C "$(overseer brain path)" diff` before pushing.
 
 ### `overseer brain path`
 

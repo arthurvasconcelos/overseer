@@ -1,0 +1,10 @@
+# Per-platform overlay — copy to config.wsl.yaml (or config.darwin.yaml / config.linux.yaml).
+# Merged after config.yaml and before config.local.yaml; WSL also reads config.linux.yaml first.
+# Only list the keys that differ on this platform. Lists replace the shared list whole.
+
+# obsidian:
+#   vault_path: /mnt/c/Users/<you>/Documents/Notes
+
+# git:
+#   defaults:
+#     gpg_ssh_program: /mnt/c/Users/<you>/AppData/Local/Microsoft/WindowsApps/op-ssh-sign-wsl.exe

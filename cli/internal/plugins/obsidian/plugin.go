@@ -28,7 +28,7 @@ func statusChecks(cfg *config.Config) []nativeplugin.StatusCheckFn {
 	if cfg.Obsidian.VaultPath == "" {
 		return nil
 	}
-	vaultPath := cfg.Obsidian.VaultPath
+	vaultPath := config.ResolveVaultPath(cfg)
 	return []nativeplugin.StatusCheckFn{
 		{
 			Name: "obsidian",

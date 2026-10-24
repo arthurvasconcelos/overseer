@@ -222,15 +222,10 @@ func ResolveBrainPath(cfg *Config) string {
 		return b
 	}
 	if cfg != nil && cfg.System.BrainPath != "" {
-		return cfg.System.BrainPath
+		return ExpandPath(cfg.System.BrainPath)
 	}
 	if cfg != nil && cfg.Brain.Path != "" {
-		home, _ := os.UserHomeDir()
-		p := cfg.Brain.Path
-		if len(p) > 1 && p[:2] == "~/" {
-			p = filepath.Join(home, p[2:])
-		}
-		return p
+		return ExpandPath(cfg.Brain.Path)
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -376,7 +371,7 @@ func writeBrainRemoveSkillSearchPath(cfg *Config, integration, path string) (boo
 	original := len(seqNode.Content)
 	var filtered []*yaml.Node
 	for _, item := range seqNode.Content {
-		if item.Value != path {
+		if ExpandPath(item.Value) != ExpandPath(path) {
 			filtered = append(filtered, item)
 		}
 	}
@@ -494,8 +489,9 @@ func writeBrainSkillSearchPath(cfg *Config, integration, path string) (bool, err
 	integrationNode := findOrCreateMapping(integrationsNode, integration)
 	seqNode := findOrCreateStringSequence(integrationNode, "skill_search_paths")
 
+	path = ContractHome(path)
 	for _, item := range seqNode.Content {
-		if item.Value == path {
+		if ExpandPath(item.Value) == ExpandPath(path) {
 			return false, nil
 		}
 	}
@@ -533,12 +529,14 @@ func findOrCreateStringSequence(parent *yaml.Node, key string) *yaml.Node {
 }
 
 // Load reads config with this merge order (later overrides earlier):
-//  1. brain/overseer/config.yaml  — shared portable config
-//  2. ~/.config/overseer/config.local.yaml — machine-local overrides
+//  1. brain/overseer/config.yaml            — shared portable config
+//  2. brain/overseer/config.<platform>.yaml — per-platform overlays (see PlatformChain)
+//  3. <user config dir>/overseer/config.local.yaml — machine-local overrides
 //
+// Maps merge key by key; lists are replaced whole by the later file.
 // To resolve the brain path, config.local.yaml is read first in a lightweight
 // pass, then the brain config is loaded as the base.
-// config.local.yaml is optional — missing file is silently ignored.
+// Every file except the brain config.yaml is optional.
 func Load() (*Config, error) {
 	localPath, err := LocalPath()
 	if err != nil {
@@ -558,7 +556,7 @@ func Load() (*Config, error) {
 		}
 	}
 
-	// Pass 2: load brain config as base, then merge local on top.
+	// Pass 2: load brain config as base, then merge overlays and local on top.
 	v := viper.New()
 
 	brainCfgPath := filepath.Join(BrainOverseerPath(&localOnly), "config.yaml")
@@ -569,15 +567,9 @@ func Load() (*Config, error) {
 		}
 	}
 
-	// Merge machine-local overrides on top.
-	if _, err := os.Stat(localPath); err == nil {
-		vl := viper.New()
-		vl.SetConfigFile(localPath)
-		if err := vl.ReadInConfig(); err != nil {
-			return nil, fmt.Errorf("reading config.local.yaml: %w", err)
-		}
-		if err := v.MergeConfigMap(vl.AllSettings()); err != nil {
-			return nil, fmt.Errorf("merging config.local.yaml: %w", err)
+	for _, path := range append(OverlayConfigPaths(&localOnly), localPath) {
+		if err := mergeConfigFile(v, path); err != nil {
+			return nil, err
 		}
 	}
 
@@ -587,4 +579,20 @@ func Load() (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// mergeConfigFile merges path into v when the file exists.
+func mergeConfigFile(v *viper.Viper, path string) error {
+	if _, err := os.Stat(path); err != nil {
+		return nil
+	}
+	vf := viper.New()
+	vf.SetConfigFile(path)
+	if err := vf.ReadInConfig(); err != nil {
+		return fmt.Errorf("reading %s: %w", filepath.Base(path), err)
+	}
+	if err := v.MergeConfigMap(vf.AllSettings()); err != nil {
+		return fmt.Errorf("merging %s: %w", filepath.Base(path), err)
+	}
+	return nil
 }

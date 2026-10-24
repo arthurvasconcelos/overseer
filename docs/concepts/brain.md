@@ -14,6 +14,8 @@ The **brain** is a private git repo that holds your personal config. It is inten
 brain/
   overseer/
     config.yaml          # integrations, git profiles, repos, etc.
+    config.darwin.yaml   # optional per-platform overlays (see Platforms below)
+    config.wsl.yaml
     Brewfile             # Homebrew packages
     Brewfile.local       # machine-specific packages (gitignored)
     dotfiles/            # mirrors ~/ — symlinked by overseer brain setup
@@ -21,6 +23,8 @@ brain/
       .gitconfig         → ~/.gitconfig
       .config/
         starship.toml    → ~/.config/starship.toml
+    dotfiles.wsl/        # optional per-platform dotfiles, replace dotfiles/ entries
+      .gitconfig         → ~/.gitconfig on WSL only
     plugins/             # overseer-* plugin executables
 ```
 
@@ -41,23 +45,67 @@ Print the resolved path at any time:
 overseer brain path
 ```
 
-## Referenced paths
+## Using an existing brain on a new machine
 
-Not everything overseer uses lives in the brain. Some directories are **referenced by path** in `config.yaml` and can stay wherever they already are:
+Run the setup wizard and pick **clone existing** when it asks where the brain comes from:
 
-| Config key | What it points to |
+```bash
+overseer setup
+```
+
+It writes `config.local.yaml`, clones the brain, then reloads config from it. Your git profiles, `brain.git_profile` and dotfiles come from the brain you cloned, so setup doesn't ask you to create them again. The brain path must be empty or missing; setup never clones over existing files.
+
+To clone without the wizard, use `overseer brain clone [url]` (the URL defaults to `brain.url`), then run `overseer setup` or `overseer brain setup`.
+
+Under [WSL](/concepts/wsl), cloning over SSH first offers to set `core.sshCommand` to `ssh.exe` if it isn't set, so the 1Password SSH agent is reachable.
+
+## Platforms
+
+One brain can serve macOS, Linux and WSL. Keep shared values in `config.yaml` and put what differs per platform in overlays next to it:
+
+| File | Loaded on |
 |---|---|
-| `obsidian.vault_path` | Your Obsidian vault |
-| `system.repos_path` (local) | Where managed repos are cloned |
+| `config.darwin.yaml` | macOS |
+| `config.linux.yaml` | Linux and WSL |
+| `config.wsl.yaml` | WSL, after `config.linux.yaml` |
 
-These are typically machine-specific and belong in `config.local.yaml`, not the shared brain config.
+Dotfiles follow the same rule: a file in `dotfiles.<platform>/` replaces the file at the same path in `dotfiles/`. For example, `dotfiles.wsl/.gitconfig` can set `core.sshCommand = ssh.exe` while macOS keeps the shared `.gitconfig`. When the overlay changes, `overseer brain setup` repoints the links.
+
+See [Config → Layers](/concepts/config#layers) for the merge order.
+
+## Paths
+
+Paths in the brain should work on every machine:
+
+- Write them relative to your home folder: `~/repos/notes`, not `/Users/you/repos/notes`. `~`, `$HOME` and other `$VARS` are expanded in every path setting.
+- `obsidian.vault_path`, `repos[].path` and `brew.brewfile` can also be relative; they resolve against `system.repos_path`.
+- A path that really differs per platform (say, a vault on the Windows drive under WSL) goes in `config.<platform>.yaml`.
+
+`overseer claude skills add-path` and `overseer codex skills add-path` store paths in your home folder as `~/...` automatically.
+
+`overseer brain status` lists absolute paths in the shared `config.yaml`, and lines in the shared `dotfiles/` that mention a platform-specific path (`/Users/`, `/Applications/`, `/opt/homebrew/`, `/home/`, `/mnt/c/`, ...).
+
+### Moving an existing brain over
+
+Brains set up before platform overlays existed keep working unchanged: with no `config.<platform>.yaml` and no `dotfiles.<platform>/`, nothing behaves differently. To make one portable:
+
+1. Run `overseer brain status --fix`. It rewrites home paths as `~/...` and moves `git.defaults.gpg_ssh_program` into its platform overlay. See [`brain status`](/commands/brain#overseer-brain-status).
+2. Fix what it still lists. For a dotfile that differs only in a few settings, keep it shared and include a per-platform file. For git:
+
+   ```ini [dotfiles/.gitconfig]
+   [include]
+       path = ~/.gitconfig.platform
+   ```
+
+   Then put the signer in `dotfiles.darwin/.gitconfig.platform` and `dotfiles.wsl/.gitconfig.platform`. Git skips an include whose file is missing.
+3. Run `overseer brain setup` on each machine to link the new overlay files, then `overseer brain push`.
 
 ## Brain commands
 
 | Command | Description |
 |---|---|
-| `overseer brain init` | Clone the brain repo from `brain.url` |
-| `overseer brain setup` | Pull latest changes and re-apply config |
+| `overseer brain clone [url]` | Clone an existing brain onto this machine |
+| `overseer brain setup` | Wire dotfiles and install Brew packages |
 | `overseer brain status` | Show brain git status and health |
 | `overseer brain pull` | `git pull` the brain repo |
 | `overseer brain push` | `git push` the brain repo |

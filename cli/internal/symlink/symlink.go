@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -27,33 +29,66 @@ func getBackupDir() string {
 	return backupDir
 }
 
-// MakeAll walks dotfilesDir and creates a symlink under homeDir for every file
-// found, preserving the relative path. A file at dotfilesDir/shell/.zshrc
-// becomes a symlink at homeDir/.zshrc (homeDir/shell/.zshrc if shell/ is not
-// the convention you want — but overseer strips no prefix; callers pass the
-// correct dotfilesDir).
-//
-// Convention: brain/overseer/dotfiles/ mirrors ~/  so the relative path from
-// dotfilesDir to each file is also the relative path from homeDir.
-func MakeAll(dotfilesDir, homeDir string, dryRun bool) error {
-	return filepath.WalkDir(dotfilesDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
+// Collect maps each file's path relative to its layer dir to the file that
+// provides it. Dirs are layered in order, so a file in a later dir replaces the
+// same relative path from an earlier one. Missing dirs are skipped.
+func Collect(dirs []string) (map[string]string, error) {
+	sources := map[string]string{}
+	for _, dir := range dirs {
+		if _, err := os.Stat(dir); err != nil {
+			continue
 		}
-		if d.IsDir() {
+		err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			rel, err := filepath.Rel(dir, path)
+			if err != nil {
+				return err
+			}
+			sources[rel] = path
 			return nil
-		}
-		rel, err := filepath.Rel(dotfilesDir, path)
+		})
 		if err != nil {
+			return nil, err
+		}
+	}
+	return sources, nil
+}
+
+// MakeAll links every file from the layered dirs (see Collect) into homeDir,
+// preserving the relative path: dirs/.config/starship.toml becomes
+// homeDir/.config/starship.toml. Existing symlinks into managedRoot are
+// overseer's own and get repointed when a different layer wins.
+//
+// Convention: brain/overseer/dotfiles/ mirrors ~/, and dotfiles.<platform>/
+// overlays it for one platform.
+func MakeAll(dirs []string, managedRoot, homeDir string, dryRun bool) error {
+	sources, err := Collect(dirs)
+	if err != nil {
+		return err
+	}
+	rels := make([]string, 0, len(sources))
+	for rel := range sources {
+		rels = append(rels, rel)
+	}
+	sort.Strings(rels)
+	for _, rel := range rels {
+		if err := Make(sources[rel], filepath.Join(homeDir, rel), managedRoot, dryRun); err != nil {
 			return err
 		}
-		return Make(path, filepath.Join(homeDir, rel), dryRun)
-	})
+	}
+	return nil
 }
 
 // Make creates a symlink at target pointing to source, idempotently.
+// A symlink that already points into managedRoot is overseer's own and is
+// repointed; any other symlink is left alone.
 // If dryRun is true no filesystem changes are made, but output is printed.
-func Make(source, target string, dryRun bool) error {
+func Make(source, target, managedRoot string, dryRun bool) error {
 	info, err := os.Lstat(target)
 
 	if err == nil && info.Mode()&os.ModeSymlink != 0 {
@@ -62,8 +97,18 @@ func Make(source, target string, dryRun bool) error {
 			fmt.Printf("  %s[skip]%s   %s already correct\n", colorGray, colorReset, target)
 			return nil
 		}
-		fmt.Printf("  %s[warn]%s   %s → symlink points elsewhere (%s), skipping\n", colorYellow, colorReset, target, current)
-		return nil
+		if !strings.HasPrefix(current, managedRoot+string(filepath.Separator)) {
+			fmt.Printf("  %s[warn]%s   %s → symlink points elsewhere (%s), skipping\n", colorYellow, colorReset, target, current)
+			return nil
+		}
+		fmt.Printf("  %s[relink]%s %s → %s\n", colorCyan, colorReset, target, source)
+		if dryRun {
+			return nil
+		}
+		if err := os.Remove(target); err != nil {
+			return err
+		}
+		return os.Symlink(source, target)
 	}
 
 	if err == nil {

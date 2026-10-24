@@ -7,11 +7,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/arthurvasconcelos/overseer/internal/config"
+	"github.com/arthurvasconcelos/overseer/internal/symlink"
 	"github.com/arthurvasconcelos/overseer/internal/tui"
+	"github.com/arthurvasconcelos/overseer/internal/wsl"
 	"github.com/spf13/cobra"
 )
 
@@ -43,6 +47,21 @@ var brainStatusCmd = &cobra.Command{
 	RunE:  runBrainStatus,
 }
 
+var brainCloneCmd = &cobra.Command{
+	Use:   "clone [url]",
+	Short: "Clone an existing brain onto this machine",
+	Long: `Clones your brain repository into the resolved brain path and applies
+brain.git_profile to it.
+
+The URL defaults to brain.url from config. The brain path must be empty or
+missing. Under WSL, cloning over SSH offers to point git at ssh.exe first so
+the 1Password SSH agent is reachable.
+
+Run overseer setup afterwards to wire dotfiles and machine settings.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runBrainClone,
+}
+
 var brainPathCmd = &cobra.Command{
 	Use:   "path",
 	Short: "Print the resolved brain path",
@@ -56,6 +75,7 @@ var brainPullCmd = &cobra.Command{
 }
 
 var brainDryRun bool
+var brainStatusFix bool
 
 var brainPushCmd = &cobra.Command{
 	Use:   "push",
@@ -88,9 +108,11 @@ Steps:
 
 func init() {
 	brainSetupCmd.Flags().BoolVar(&brainDryRun, "dry-run", false, "Preview changes without making them")
+	brainStatusCmd.Flags().BoolVar(&brainStatusFix, "fix", false, "Rewrite home paths in the shared config as ~/ and move git.defaults.gpg_ssh_program to its platform overlay")
 	brainInitCmd.Hidden = true
 	brainCmd.AddCommand(brainInitCmd)
 	brainCmd.AddCommand(brainSetupCmd)
+	brainCmd.AddCommand(brainCloneCmd)
 	brainCmd.AddCommand(brainStatusCmd)
 	brainCmd.AddCommand(brainPullCmd)
 	brainCmd.AddCommand(brainPushCmd)
@@ -205,6 +227,15 @@ func runBrainStatus(_ *cobra.Command, _ []string) error {
 	checkPath("overseer/Brewfile", filepath.Join(overseerDir, "Brewfile"))
 	checkPath("overseer/plugins/", filepath.Join(overseerDir, "plugins"))
 
+	fmt.Println()
+	fmt.Printf("  %s %s\n", tui.StyleDim.Render("platform:"), tui.StyleNormal.Render(strings.Join(config.PlatformChain(), " → ")))
+	overlays := append(config.OverlayConfigPaths(cfg), config.DotfilesDirs(cfg)[1:]...)
+	for _, path := range overlays {
+		if _, err := os.Stat(path); err == nil {
+			fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("overseer/"+filepath.Base(path)))
+		}
+	}
+
 	// Version control status.
 	fmt.Println()
 	if brainIsGit(brainPath) {
@@ -234,19 +265,22 @@ func runBrainStatus(_ *cobra.Command, _ []string) error {
 	}
 
 	// Dotfile wiring count.
-	dotfilesDir := filepath.Join(overseerDir, "dotfiles")
-	if _, err := os.Stat(dotfilesDir); err == nil {
-		total, wired := countDotfiles(dotfilesDir)
-		if total > 0 {
-			fmt.Println()
-			fmt.Printf("  %s %s  %s %s\n",
-				tui.StyleDim.Render("dotfiles:"),
-				tui.StyleNormal.Render(fmt.Sprintf("%d total", total)),
-				tui.StyleDim.Render("/"),
-				tui.StyleNormal.Render(fmt.Sprintf("%d wired", wired)),
-			)
+	if total, wired := countDotfiles(config.DotfilesDirs(cfg)); total > 0 {
+		fmt.Println()
+		fmt.Printf("  %s %s  %s %s\n",
+			tui.StyleDim.Render("dotfiles:"),
+			tui.StyleNormal.Render(fmt.Sprintf("%d total", total)),
+			tui.StyleDim.Render("/"),
+			tui.StyleNormal.Render(fmt.Sprintf("%d wired", wired)),
+		)
+	}
+
+	if brainStatusFix {
+		if err := fixPortability(cfg); err != nil {
+			return err
 		}
 	}
+	printPortability(overseerDir)
 
 	if runtime.GOOS == "darwin" {
 		fmt.Println()
@@ -274,21 +308,88 @@ func brainGitOutput(brainPath string, args ...string) string {
 	return strings.TrimSpace(out.String())
 }
 
-func countDotfiles(dotfilesDir string) (total, wired int) {
+func countDotfiles(dirs []string) (total, wired int) {
 	home, _ := os.UserHomeDir()
-	_ = filepath.WalkDir(dotfilesDir, func(path string, d os.DirEntry, _ error) error {
-		if d.IsDir() {
-			return nil
-		}
+	sources, _ := symlink.Collect(dirs)
+	for rel, source := range sources {
 		total++
-		rel, _ := filepath.Rel(dotfilesDir, path)
-		target := filepath.Join(home, rel)
-		if link, err := os.Readlink(target); err == nil && link == path {
+		if link, err := os.Readlink(filepath.Join(home, rel)); err == nil && link == source {
 			wired++
 		}
-		return nil
-	})
+	}
 	return
+}
+
+// printPortability warns about shared brain content that only works on one
+// platform: absolute paths in config.yaml and hardcoded paths in dotfiles/.
+func printPortability(overseerDir string) {
+	issues, err := config.NonPortablePaths(filepath.Join(overseerDir, "config.yaml"))
+	if err != nil {
+		return
+	}
+
+	type dotfileHit struct {
+		rel   string
+		lines []int
+	}
+	var hits []dotfileHit
+	dotfilesDir := filepath.Join(overseerDir, "dotfiles")
+	if sources, err := symlink.Collect([]string{dotfilesDir}); err == nil {
+		for rel, source := range sources {
+			if lines := config.PlatformSpecificLines(source); len(lines) > 0 {
+				hits = append(hits, dotfileHit{rel, lines})
+			}
+		}
+	}
+	sort.Slice(hits, func(i, j int) bool { return hits[i].rel < hits[j].rel })
+
+	if len(issues) == 0 && len(hits) == 0 {
+		return
+	}
+
+	fmt.Println()
+	fmt.Printf("  %s  %s\n", tui.StyleWarn.Render("⚠"), tui.StyleNormal.Render("shared brain content that only works on some platforms"))
+	for _, issue := range issues {
+		fmt.Printf("     %s %s %s\n",
+			tui.StyleDim.Render(fmt.Sprintf("config.yaml:%d", issue.Line)),
+			tui.StyleNormal.Render(issue.Key),
+			tui.StyleMuted.Render(issue.Value))
+	}
+	for _, hit := range hits {
+		lines := make([]string, len(hit.lines))
+		for i, n := range hit.lines {
+			lines[i] = strconv.Itoa(n)
+		}
+		fmt.Printf("     %s %s\n",
+			tui.StyleDim.Render("dotfiles/"+hit.rel),
+			tui.StyleMuted.Render("line "+strings.Join(lines, ", ")))
+	}
+	fmt.Printf("     %s\n", tui.StyleMuted.Render("use ~/ paths, or move these to config.<platform>.yaml / dotfiles.<platform>/"))
+	if len(issues) > 0 && !brainStatusFix {
+		fmt.Printf("     %s\n", tui.StyleMuted.Render("run: overseer brain status --fix  (fixes home paths and git.defaults.gpg_ssh_program)"))
+	}
+}
+
+func fixPortability(cfg *config.Config) error {
+	fixes, err := config.FixPortability(cfg)
+	if err != nil {
+		return err
+	}
+	fmt.Println()
+	if len(fixes) == 0 {
+		fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("nothing to fix automatically"))
+		return nil
+	}
+	fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render(fmt.Sprintf("fixed %d value(s) in config.yaml", len(fixes))))
+	for _, fix := range fixes {
+		fmt.Printf("     %s %s %s %s\n",
+			tui.StyleNormal.Render(fix.Key),
+			tui.StyleMuted.Render(fix.From),
+			tui.StyleDim.Render("→"),
+			tui.StyleNormal.Render(fix.To))
+	}
+	fmt.Printf("     %s\n", tui.StyleMuted.Render("review with: git -C "+config.ResolveBrainPath(cfg)+" diff"))
+	return nil
 }
 
 // --- brain pull ---
@@ -412,53 +513,111 @@ func initBrainRepo(cfg *config.Config, remoteURL string) error {
 	return nil
 }
 
-// cloneExistingBrain wires the brain directory to an existing remote repository
-// by fetching and resetting to match origin. Any scaffolded files are replaced
-// by the remote content.
-func cloneExistingBrain(cfg *config.Config, remoteURL string) error {
-	brainPath := config.ResolveBrainPath(cfg)
-
-	if remoteURL == "" {
-		var err error
-		remoteURL, err = tui.Prompt("remote URL", "", "")
-		if err != nil || remoteURL == "" {
-			return fmt.Errorf("remote URL is required to clone an existing brain")
+// cloneBrain clones remoteURL into brainPath. brainPath must be missing or
+// empty; an existing git repository there is kept as is.
+func cloneBrain(remoteURL, brainPath string) error {
+	if brainIsGit(brainPath) {
+		origin := brainGitOutput(brainPath, "remote", "get-url", "origin")
+		fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("brain already cloned at "+brainPath))
+		if origin != "" && origin != remoteURL {
+			fmt.Println(tui.WarnLine("brain", "its origin is "+origin+", not "+remoteURL))
 		}
-		fmt.Println()
+		return nil
+	}
+	if entries, err := os.ReadDir(brainPath); err == nil && len(entries) > 0 {
+		return fmt.Errorf("%s exists and is not empty — move it aside or choose another brain path", brainPath)
 	}
 
-	if out, err := gitIn(brainPath, "init"); err != nil {
-		return fmt.Errorf("git init: %s", strings.TrimSpace(out))
+	prepareWSLSSH(remoteURL)
+
+	if err := os.MkdirAll(filepath.Dir(brainPath), 0755); err != nil {
+		return fmt.Errorf("creating %s: %w", filepath.Dir(brainPath), err)
 	}
-	if out, err := gitIn(brainPath, "remote", "add", "origin", remoteURL); err != nil {
-		return fmt.Errorf("git remote add: %s", strings.TrimSpace(out))
+	fmt.Printf("  %s  %s\n", tui.StyleNormal.Render("↓"), tui.StyleNormal.Render("cloning "+remoteURL))
+	cmd := exec.Command("git", "clone", remoteURL, brainPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		if wsl.Detected() && isSSHRemote(remoteURL) {
+			return fmt.Errorf("git clone failed: %w — under WSL, check that core.sshCommand is ssh.exe (see the WSL guide)", err)
+		}
+		return fmt.Errorf("git clone failed: %w", err)
+	}
+	fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("cloned brain into "+brainPath))
+	return nil
+}
+
+// prepareWSLSSH offers to point git at ssh.exe before an SSH clone under WSL,
+// because the Linux ssh can't reach the 1Password agent. An existing
+// core.sshCommand is never changed.
+func prepareWSLSSH(remoteURL string) {
+	if !wsl.Detected() || !isSSHRemote(remoteURL) {
+		return
+	}
+	if current, _ := exec.Command("git", "config", "--global", "core.sshCommand").Output(); strings.TrimSpace(string(current)) != "" {
+		return
+	}
+	if _, err := exec.LookPath("ssh.exe"); err != nil {
+		fmt.Println(tui.WarnLine("ssh", "ssh.exe not on PATH — git will use the Linux ssh, which can't reach the 1Password agent"))
+		return
+	}
+	confirmed, err := tui.Confirm("git uses the Linux ssh, which can't reach the 1Password agent — set core.sshCommand to ssh.exe globally?")
+	if err != nil || !confirmed {
+		return
+	}
+	if out, err := exec.Command("git", "config", "--global", "core.sshCommand", "ssh.exe").CombinedOutput(); err != nil {
+		fmt.Println(tui.WarnLine("ssh", "setting core.sshCommand: "+strings.TrimSpace(string(out))))
+		return
+	}
+	fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("git core.sshCommand set to ssh.exe"))
+}
+
+// isSSHRemote reports whether a git remote URL uses SSH (ssh:// or scp-like user@host:path).
+func isSSHRemote(url string) bool {
+	if strings.HasPrefix(url, "ssh://") {
+		return true
+	}
+	return !strings.Contains(url, "://") && strings.Contains(url, "@") && strings.Contains(url, ":")
+}
+
+// --- brain clone ---
+
+func runBrainClone(_ *cobra.Command, args []string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
 	}
 
-	fmt.Printf("  %s  %s\n", tui.StyleNormal.Render("↓"), tui.StyleNormal.Render("fetching from "+remoteURL))
-	fetchCmd := exec.Command("git", "-C", brainPath, "fetch", "origin")
-	fetchCmd.Stdout = os.Stdout
-	fetchCmd.Stderr = os.Stderr
-	if err := fetchCmd.Run(); err != nil {
-		return fmt.Errorf("git fetch failed: %w", err)
+	remoteURL := cfg.Brain.URL
+	if len(args) == 1 {
+		remoteURL = args[0]
+	}
+	if remoteURL == "" {
+		remoteURL, err = tui.Prompt("brain remote URL", "", "")
+		if err != nil {
+			return err
+		}
+		if remoteURL == "" {
+			return fmt.Errorf("a remote URL is required to clone a brain")
+		}
 	}
 
-	// Detect the default remote branch.
-	branch := brainGitOutput(brainPath, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
-	branch = strings.TrimPrefix(branch, "origin/")
-	if branch == "" {
-		branch = "main"
+	brainPath := config.ResolveBrainPath(cfg)
+	fmt.Println(tui.SectionHeader("brain clone", brainPath))
+	fmt.Println()
+
+	if err := cloneBrain(remoteURL, brainPath); err != nil {
+		return err
 	}
 
-	if out, err := gitIn(brainPath, "reset", "--hard", "origin/"+branch); err != nil {
-		return fmt.Errorf("git reset: %s", strings.TrimSpace(out))
+	cfg, err = config.Load()
+	if err != nil {
+		return err
 	}
-	if out, err := gitIn(brainPath, "checkout", "-B", branch, "origin/"+branch); err != nil {
-		return fmt.Errorf("git checkout: %s", strings.TrimSpace(out))
-	}
-
 	applyBrainGitProfile(brainPath, cfg)
 
-	fmt.Printf("  %s  %s\n", tui.StyleOK.Render("✓"), tui.StyleNormal.Render("cloned brain from "+remoteURL))
+	fmt.Println()
+	fmt.Println(tui.StyleMuted.Render("Next: overseer setup — machine settings, git profile and dotfiles"))
 	return nil
 }
 
@@ -648,8 +807,13 @@ const brainConfigExample = `# overseer configuration
 #   - ~/repos/work
 
 # obsidian:
-#   vault_path: /absolute/path/to/your/vault
+#   vault_path: ~/path/to/your/vault
 #   vault_name: MyVault
 #   daily_notes_folder: Daily
 #   templates_folder: Templates
+
+# Paths: prefer ~/... so this file works on every machine. Values that differ
+# per platform go in config.darwin.yaml, config.linux.yaml or config.wsl.yaml
+# next to this file (WSL also reads config.linux.yaml). Dotfiles work the same
+# way: dotfiles.<platform>/ overrides files in dotfiles/.
 `
