@@ -212,7 +212,7 @@ overseer run <script-name> [args...]
 ```
 
 ### overseer update
-Check for and apply a new overseer release.
+Check for and apply a new overseer release. Homebrew installs (binary under `Caskroom/` or `Cellar/`) are upgraded with `brew upgrade arthurvasconcelos/tap/overseer`, using the `brew` from the install prefix even when it isn't on PATH; other installs download the release into `~/bin/overseer`.
 
 ```bash
 overseer update

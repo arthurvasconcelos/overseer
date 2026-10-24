@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -29,6 +30,8 @@ func init() {
 }
 
 const githubRepo = "arthurvasconcelos/overseer"
+
+const homebrewTap = "arthurvasconcelos/tap"
 
 func trimV(v string) string { return strings.TrimPrefix(v, "v") }
 
@@ -54,12 +57,64 @@ func runUpdate(_ *cobra.Command, _ []string) error {
 		fmt.Println(tui.StyleWarn.Render("update available: "+Version+" → "+latestTag))
 	}
 
+	if brew, ok := homebrewInstall(); ok {
+		return upgradeWithHomebrew(brew, latestTag)
+	}
+
 	installDir := filepath.Join(os.Getenv("HOME"), "bin")
 	if err := downloadAndInstall(client, latestTag, latestVersion, installDir); err != nil {
 		return err
 	}
 
 	fmt.Println(tui.StyleOK.Render("✓") + "  updated to " + tui.StyleAccent.Render(latestTag))
+	return nil
+}
+
+// homebrewInstall reports whether the running binary was installed by Homebrew
+// and returns the brew that manages it. brew is found from the install
+// location, so it works even when brew isn't on PATH; it is "" when it can't
+// be found at all.
+func homebrewInstall() (string, bool) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", false
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	for _, marker := range []string{"/Caskroom/", "/Cellar/"} {
+		prefix, _, ok := strings.Cut(exe, marker)
+		if !ok {
+			continue
+		}
+		if brew := filepath.Join(prefix, "bin", "brew"); isExecutable(brew) == nil {
+			return brew, true
+		}
+		brew, _ := exec.LookPath("brew")
+		return brew, true
+	}
+	return "", false
+}
+
+// upgradeWithHomebrew upgrades through brew instead of downloading a second
+// copy into ~/bin, which would shadow or be shadowed by the Homebrew one.
+func upgradeWithHomebrew(brew, latestTag string) error {
+	if brew == "" {
+		return fmt.Errorf("overseer was installed with Homebrew but brew wasn't found — run: brew upgrade %s/overseer", homebrewTap)
+	}
+	fmt.Println(tui.StyleMuted.Render("installed with Homebrew — running: brew upgrade " + homebrewTap + "/overseer"))
+	cmd := exec.Command(brew, "upgrade", homebrewTap+"/overseer")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("brew upgrade failed: %w", err)
+	}
+	fmt.Println(tui.StyleOK.Render("✓") + "  updated to " + tui.StyleAccent.Render(latestTag))
+
+	stale := filepath.Join(os.Getenv("HOME"), "bin", "overseer")
+	if isExecutable(stale) == nil {
+		fmt.Println(tui.WarnLine("update", stale+" is a separate copy from an earlier overseer update — remove it so the Homebrew one is used"))
+	}
 	return nil
 }
 
