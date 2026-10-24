@@ -22,7 +22,7 @@ Safe to re-run at any time — existing values are shown as defaults and nothing
 5. **Scaffold** (start new only): creates `overseer/dotfiles/`, `overseer/plugins/`, a `Brewfile` and a commented `config.yaml` if they're missing, and saves the remote URL into `config.yaml`.
 6. **Git**: optionally sets git defaults (user name, signing format) and creates a first git profile, saved into the brain's `config.yaml`. Skipped when the brain already has profiles.
 7. **Version control**: applies `brain.git_profile` if the brain is a git repo; otherwise offers to make it one.
-8. **Dotfiles**: symlinks `dotfiles/` and the `dotfiles.<platform>/` overlays into `~/`.
+8. **Dotfiles**: symlinks `dotfiles/` and the `dotfiles.<platform>/` overlays into `~/`. If any would replace a file you already have, setup lists them and asks first. Answer no to keep yours and link the rest.
 9. **Packages** (macOS only): runs `brew bundle` from the Brewfile.
 
 To re-apply config without the interactive wizard, use [`overseer brain setup`](/commands/brain#overseer-brain-setup).

@@ -71,6 +71,18 @@ One brain can serve macOS, Linux and WSL. Keep shared values in `config.yaml` an
 
 Dotfiles follow the same rule: a file in `dotfiles.<platform>/` replaces the file at the same path in `dotfiles/`. For example, `dotfiles.wsl/.gitconfig` can set `core.sshCommand = ssh.exe` while macOS keeps the shared `.gitconfig`. When the overlay changes, `overseer brain setup` repoints the links.
 
+Only files that work everywhere belong in `dotfiles/`, because a file there is linked on **every** platform that doesn't have its own copy. Shell startup files (`.zshrc`, `.bashrc`) rarely qualify: they load tools from platform-specific places. Keep one per platform instead:
+
+```
+dotfiles.darwin/.zshrc   # macOS
+dotfiles.linux/.zshrc    # Linux, and WSL unless dotfiles.wsl/ has one
+dotfiles.wsl/.zshrc      # WSL only
+```
+
+A platform with no copy gets no link, and keeps whatever file it already has.
+
+When a file stops applying on a platform (for example, you move `dotfiles/.zshrc` to `dotfiles.darwin/.zshrc`), `overseer brain setup` on the other platforms removes the link and moves the file it had replaced back from `~/.overseer-backups/`.
+
 See [Config → Layers](/concepts/config#layers) for the merge order.
 
 ## Paths

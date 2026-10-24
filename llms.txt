@@ -66,7 +66,7 @@ Manages the brain directory.
 
 Subcommands:
 - `overseer brain clone [url]` — clone an existing brain (URL defaults to brain.url) into an empty brain path and apply brain.git_profile
-- `overseer brain setup` — wire dotfiles (with platform overlays) and install Brew packages
+- `overseer brain setup` — wire dotfiles (with platform overlays) and install Brew packages; removes links for brain files that no longer apply on this platform and restores the file each one replaced from `~/.overseer-backups/`. Only files that work on every platform belong in `dotfiles/`; shell rc files usually go in `dotfiles.<platform>/`.
 - `overseer brain status` — show brain git status, platform overlays, dotfile wiring, and non-portable paths in shared config/dotfiles; `--fix` rewrites home paths in the shared config.yaml as `~/` and moves `git.defaults.gpg_ssh_program` to its `config.<platform>.yaml`
 - `overseer brain pull` — git pull the brain repo
 - `overseer brain push` — commit all brain changes (using `brain.git_profile`) and push; sets the upstream on the first push to a new remote (adding `origin` from `brain.url` if missing) and pushes earlier unpushed commits

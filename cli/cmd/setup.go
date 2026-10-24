@@ -183,7 +183,7 @@ func runSetup(_ *cobra.Command, _ []string) error {
 	fmt.Println(tui.SectionHeader("dotfiles", "wire from brain into ~/"))
 	fmt.Println()
 
-	if err := wireDotfiles(cfg, dryRun); err != nil {
+	if err := wireDotfiles(cfg, dryRun, true); err != nil {
 		return err
 	}
 
@@ -391,21 +391,63 @@ func warnSharedSigner(cfg *config.Config) {
 	fmt.Println()
 }
 
-// wireDotfiles links dotfiles/ and the dotfiles.<platform> overlays into ~/.
-func wireDotfiles(cfg *config.Config, dry bool) error {
-	dirs := config.DotfilesDirs(cfg)
-	if _, err := os.Stat(dirs[0]); os.IsNotExist(err) {
-		fmt.Printf("  %s\n", tui.StyleMuted.Render("no dotfiles found — add files under "+dirs[0]+"/"))
+// wireDotfiles links dotfiles/ and the dotfiles.<platform> overlays into ~/,
+// and removes links for brain files that don't apply on this platform. With
+// confirm, files that would be replaced are listed first and the user can
+// keep them.
+func wireDotfiles(cfg *config.Config, dry, confirm bool) error {
+	active, err := symlink.Collect(config.DotfilesDirs(cfg))
+	if err != nil {
+		return fmt.Errorf("reading dotfiles: %w", err)
+	}
+	known, err := symlink.Collect(config.AllDotfilesDirs(cfg))
+	if err != nil {
+		return fmt.Errorf("reading dotfiles: %w", err)
+	}
+	overseerDir := config.BrainOverseerPath(cfg)
+	if len(known) == 0 {
+		fmt.Printf("  %s\n", tui.StyleMuted.Render("no dotfiles found — add files under "+filepath.Join(overseerDir, "dotfiles")+"/"))
 		return nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
-	if err := symlink.MakeAll(dirs, config.BrainOverseerPath(cfg), home, dry); err != nil {
+
+	if conflicts := symlink.Conflicts(active, home); confirm && !dry && len(conflicts) > 0 {
+		fmt.Printf("  %s\n", tui.StyleNormal.Render("these files in ~/ would be replaced by links into the brain:"))
+		for _, rel := range conflicts {
+			fmt.Printf("     %s  %s\n", tui.StyleMuted.Render("·"), tui.StyleNormal.Render(rel+"  ← "+symlinkLayer(overseerDir, active[rel])))
+		}
+		replace, err := tui.Confirm("replace them? (originals are moved to ~/.overseer-backups/)")
+		if err != nil {
+			return err
+		}
+		fmt.Println()
+		if !replace {
+			for _, rel := range conflicts {
+				delete(active, rel)
+			}
+			fmt.Printf("  %s\n", tui.StyleMuted.Render("kept your files — a brain file that only fits one platform belongs in dotfiles.<platform>/"))
+		}
+	}
+
+	if err := symlink.LinkAll(active, overseerDir, home, dry); err != nil {
 		return fmt.Errorf("wiring dotfiles: %w", err)
 	}
+	if err := symlink.Prune(known, active, overseerDir, home, dry); err != nil {
+		return fmt.Errorf("removing stale dotfile links: %w", err)
+	}
 	return nil
+}
+
+// symlinkLayer names the brain layer a dotfile comes from, e.g. "dotfiles.wsl/".
+func symlinkLayer(overseerDir, source string) string {
+	rel, err := filepath.Rel(overseerDir, source)
+	if err != nil {
+		return source
+	}
+	return strings.SplitN(filepath.ToSlash(rel), "/", 2)[0] + "/"
 }
 
 // runBrainSetup wires dotfiles from brain and installs Brew packages.
@@ -418,7 +460,7 @@ func runBrainSetup(cfg *config.Config, dry bool) error {
 	}
 	fmt.Printf("  brain: %s\n\n", config.ResolveBrainPath(cfg))
 
-	if err := wireDotfiles(cfg, dry); err != nil {
+	if err := wireDotfiles(cfg, dry, false); err != nil {
 		return err
 	}
 

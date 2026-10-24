@@ -705,10 +705,13 @@ func commitBrain(brainPath string, cfg *config.Config, porcelain string) error {
 	lines := strings.Split(strings.TrimSpace(porcelain), "\n")
 	files := make([]string, 0, len(lines))
 	for _, line := range lines {
-		if len(line) < 3 {
+		// The status column is "XY " but the output was trimmed, so the first
+		// line may have lost its leading space: split on the first space instead.
+		_, name, ok := strings.Cut(strings.TrimLeft(line, " "), " ")
+		if !ok {
 			continue
 		}
-		name := strings.TrimSpace(line[3:])
+		name = strings.TrimSpace(name)
 		// Renames: "old -> new" — keep only the destination.
 		if idx := strings.Index(name, " -> "); idx != -1 {
 			name = name[idx+4:]

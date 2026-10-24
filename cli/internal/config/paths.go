@@ -92,6 +92,20 @@ func DotfilesDirs(cfg *Config) []string {
 	return dirs
 }
 
+// AllDotfilesDirs returns dotfiles/ and every dotfiles.<platform> directory in
+// the brain, including those for other platforms.
+func AllDotfilesDirs(cfg *Config) []string {
+	dir := BrainOverseerPath(cfg)
+	dirs := []string{filepath.Join(dir, "dotfiles")}
+	overlays, _ := filepath.Glob(filepath.Join(dir, "dotfiles.*"))
+	for _, overlay := range overlays {
+		if info, err := os.Stat(overlay); err == nil && info.IsDir() {
+			dirs = append(dirs, overlay)
+		}
+	}
+	return dirs
+}
+
 // ConfigLayers returns the config files that exist, in merge order.
 func ConfigLayers(cfg *Config) []string {
 	var layers []string

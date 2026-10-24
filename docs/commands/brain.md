@@ -22,6 +22,9 @@ Run `overseer setup` afterwards for machine settings and dotfiles. `overseer set
 
 Re-apply the brain without the wizard: symlinks dotfiles (`dotfiles/` plus the `dotfiles.<platform>/` overlays, see [Brain → Platforms](/concepts/brain#platforms)) and installs Brew packages on macOS.
 
+- Existing files are moved to `~/.overseer-backups/<timestamp>/` before being replaced, under the same path they had in your home folder.
+- Links to brain files that don't apply on this platform any more are removed, and the latest backup of the file they replaced is moved back into place.
+
 ```bash
 overseer brain setup
 overseer brain setup --dry-run   # preview without making changes
