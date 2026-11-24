@@ -311,11 +311,11 @@ overseer plugins toggle <name>   # enable or disable a plugin
 ### overseer completion
 Generate shell completion scripts.
 
+Homebrew installs need nothing: the cask installs bash, zsh and fish completions. For zsh, `eval "$(brew shellenv)"` must run before `compinit` (with oh-my-zsh, before `source $ZSH/oh-my-zsh.sh`) so Homebrew's `share/zsh/site-functions` is on `fpath`. For other installs:
+
 ```bash
-# Zsh
+# Zsh — after compinit / oh-my-zsh in ~/.zshrc, or save to "${fpath[1]}/_overseer"
 source <(overseer completion zsh)
-# or add to ~/.zshrc:
-echo 'source <(overseer completion zsh)' >> ~/.zshrc
 
 # Bash
 echo 'source <(overseer completion bash)' >> ~/.bashrc
